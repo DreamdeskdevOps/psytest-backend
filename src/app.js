@@ -1,0 +1,33 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+const authRoutes = require('./routes/auth');
+// const testRoutes = require('./routes/tests');
+// const userRoutes = require('./routes/users');
+
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Routes
+app.use('/api/' + process.env.API_VERSION + '/auth', authRoutes);
+// app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
+// app.use('/api/' + process.env.API_VERSION + '/users', userRoutes);
+
+// Basic health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        message: 'Server is running',
+        timestamp: new Date().toISOString()
+    });
+});
+
+module.exports = app;
