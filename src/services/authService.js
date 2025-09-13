@@ -26,6 +26,7 @@ class AuthService {
 
     // Generate and send OTP
     const otpCode = smsService.generateOTP();
+
     
     // Delete any existing OTPs for this phone and purpose
     await OTP.deleteByPhoneAndPurpose(phoneNumber, 'registration');
@@ -57,6 +58,8 @@ class AuthService {
   // Register user with OTP verification
   async registerUser(userData) {
     const { firstName, lastName, email, password, phoneNumber, otpCode } = userData;
+
+    console.log('Registering user with data:', { firstName, lastName, email, phoneNumber, otpCode });
 
     // Verify OTP
     const otpVerification = await OTP.verify(phoneNumber, otpCode, 'registration');

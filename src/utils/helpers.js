@@ -96,6 +96,23 @@ function generateOTP(length = 6) {
     return otp;
 }
 
+/**
+ * Generate a standardized API response
+ * @param {boolean} success - Success status
+ * @param {string} message - Response message
+ * @param {Object} data - Response data
+ * @param {number} statusCode - HTTP status code
+ * @returns {Object} - Standardized response object
+ */
+function generateResponse(success, message, data = null, statusCode = 200) {
+    return {
+        success,
+        message,
+        data,
+        statusCode
+    };
+}
+
 module.exports = {
     sendSuccessResponse,
     sendErrorResponse,
@@ -103,5 +120,6 @@ module.exports = {
     formatDate,
     isValidEmail,
     formatPhoneForDisplay,
-    generateOTP
+    generateOTP,
+    generateResponse
 };

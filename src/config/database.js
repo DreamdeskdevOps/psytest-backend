@@ -18,8 +18,11 @@ const connectDB = async () => {
         console.log('✅ PostgreSQL Connected Successfully via Sequelize');
         console.log(`📊 Database: ${process.env.DB_NAME}`);
         
-        // Sync all models
-        await sequelize.sync({ alter: true });
+        // Models are ready for use
+        console.log('✅ Models are ready for use');
+        
+        // Sync all models with force: false to avoid altering existing tables
+        await sequelize.sync({ force: false });
         console.log('📋 Database models synchronized');
     } catch (error) {
         console.error('❌ Database Connection Failed:', error.message);
@@ -29,7 +32,13 @@ const connectDB = async () => {
 
 // Database utility functions
 const getOne = async (query, params = []) => {
-    const [results] = await sequelize.query(query, {
+    // Convert $1, $2, etc. to ? placeholders for Sequelize
+    let sequelizeQuery = query;
+    for (let i = params.length; i >= 1; i--) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    }
+    
+    const [results] = await sequelize.query(sequelizeQuery, {
         replacements: params,
         type: Sequelize.QueryTypes.SELECT
     });
@@ -37,7 +46,13 @@ const getOne = async (query, params = []) => {
 };
 
 const getMany = async (query, params = []) => {
-    const results = await sequelize.query(query, {
+    // Convert $1, $2, etc. to ? placeholders for Sequelize
+    let sequelizeQuery = query;
+    for (let i = params.length; i >= 1; i--) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    }
+    
+    const results = await sequelize.query(sequelizeQuery, {
         replacements: params,
         type: Sequelize.QueryTypes.SELECT
     });
@@ -45,7 +60,13 @@ const getMany = async (query, params = []) => {
 };
 
 const insertOne = async (query, params = []) => {
-    const [results] = await sequelize.query(query, {
+    // Convert $1, $2, etc. to ? placeholders for Sequelize
+    let sequelizeQuery = query;
+    for (let i = params.length; i >= 1; i--) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    }
+    
+    const [results] = await sequelize.query(sequelizeQuery, {
         replacements: params,
         type: Sequelize.QueryTypes.INSERT
     });
@@ -53,7 +74,13 @@ const insertOne = async (query, params = []) => {
 };
 
 const updateOne = async (query, params = []) => {
-    const [results] = await sequelize.query(query, {
+    // Convert $1, $2, etc. to ? placeholders for Sequelize
+    let sequelizeQuery = query;
+    for (let i = params.length; i >= 1; i--) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    }
+    
+    const [results] = await sequelize.query(sequelizeQuery, {
         replacements: params,
         type: Sequelize.QueryTypes.UPDATE
     });
@@ -61,7 +88,13 @@ const updateOne = async (query, params = []) => {
 };
 
 const deleteOne = async (query, params = []) => {
-    const [results] = await sequelize.query(query, {
+    // Convert $1, $2, etc. to ? placeholders for Sequelize
+    let sequelizeQuery = query;
+    for (let i = params.length; i >= 1; i--) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    }
+    
+    const [results] = await sequelize.query(sequelizeQuery, {
         replacements: params,
         type: Sequelize.QueryTypes.DELETE
     });
@@ -69,7 +102,13 @@ const deleteOne = async (query, params = []) => {
 };
 
 const executeQuery = async (query, params = []) => {
-    const results = await sequelize.query(query, {
+    // Convert $1, $2, etc. to ? placeholders for Sequelize
+    let sequelizeQuery = query;
+    for (let i = params.length; i >= 1; i--) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    }
+    
+    const results = await sequelize.query(sequelizeQuery, {
         replacements: params
     });
     return results;

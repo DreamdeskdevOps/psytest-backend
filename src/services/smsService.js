@@ -2,9 +2,13 @@ const axios = require('axios');
 
 class SMSService {
   constructor() {
-    this.baseUrl = 'https://smschilly.in/app/api';
-    this.userKey = process.env.SMS_API_KEY || '566A86EC8D0552';
-    this.senderId = process.env.SMS_SENDER_ID || 'DDESPL';
+    this.baseUrl = 'https://smschilly.in/app/smsapi/index.php';
+    this.userKey =  '566A86EC8D0552';
+    this.senderId =  'DDESPL';
+    this.campaign = '7600';
+    this.routeId = '101456';
+    this.templateId = '1707175759144612640';
+    this.peId = '1701168992645972214';
   }
 
   // Generate 6-digit OTP
@@ -13,7 +17,7 @@ class SMSService {
   }
 
   // Send OTP via SMSChilly API
-  async sendOTP(phoneNumber, otp, purpose = 'login') {
+  async sendOTP(phoneNumber, otp, purpose = 'login', userName = 'User') {
     try {
       // Clean phone number (remove +91, spaces, etc.)
       const cleanPhone = phoneNumber.replace(/[\s+\-()]/g, '').replace(/^(\+91|91)/, '');
@@ -22,55 +26,58 @@ class SMSService {
         throw new Error('Invalid phone number format');
       }
 
-      // Create message based on purpose
+      // Create message based on purpose - using the exact template format
       let message;
       switch (purpose) {
         case 'login':
         case 'verification':
-          message = `Hi User, your login OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
+          message = `Hi ${userName}, your login OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
           break;
         case 'registration':
-          message = `Hi User, your registration OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
+          message = `Hi ${userName}, your login OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
           break;
         case 'password_reset':
-          message = `Hi User, your password reset OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
+          message = `Hi ${userName}, your login reset OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
           break;
         case 'phone_verification':
-          message = `Hi User, your phone verification OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
+          message = `Hi ${userName}, your login verification OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
           break;
         default:
-          message = `Hi User, your OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
+          message = `Hi ${userName}, your login OTP is ${otp}. This code is valid for 10 minutes. EDUDD`;
       }
 
-      // Prepare request data according to SMSChilly API documentation
-      const requestData = {
-        user_key: this.userKey,
-        phone: cleanPhone,
-        message: message,
-        senderid: this.senderId
-      };
+      // Prepare request parameters according to the working URL format
+      const params = new URLSearchParams({
+        key: this.userKey,
+        campaign: this.campaign,
+        routeid: this.routeId,
+        type: 'text',
+        contacts: cleanPhone,
+        senderid: this.senderId,
+        msg: message,
+        template_id: this.templateId,
+        pe_id: this.peId
+      });
 
-      console.log('Sending SMS with data:', { ...requestData, message: message.substring(0, 50) + '...' });
+      const fullUrl = `${this.baseUrl}?${params.toString()}`;
+      console.log('Sending SMS with URL:', fullUrl.replace(this.userKey, process.env.SMS_API_KEY ));
 
-      // Send SMS using POST method as per SMSChilly documentation
-      const response = await axios.post(`${this.baseUrl}/send_sms`, requestData, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
+      // Send SMS using GET method as per the working URL format
+      const response = await axios.get(fullUrl, {
         timeout: 30000
       });
 
       console.log('SMS API Response:', response.data);
 
-      // Check response according to SMSChilly documentation format
-      if (response.data.status === 'true' || response.data.status === true) {
+      // Check if response indicates success
+      if (response.status === 200 && response.data) {
         return {
           success: true,
-          messageId: response.data.msg_id,
+          messageId: response.data.msg_id || 'sent',
           message: 'OTP sent successfully'
         };
       } else {
-        throw new Error(response.data.message || 'Failed to send SMS');
+        throw new Error('Failed to send SMS');
       }
 
     } catch (error) {

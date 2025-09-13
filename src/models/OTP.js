@@ -34,7 +34,7 @@ class OTP {
     const cleanPhone = phoneNumber.replace(/[\s+\-()]/g, '').replace(/^(\+91|91)/, '');
     const query = `
       SELECT * FROM ${this.tableName} 
-      WHERE phone_number = $1 AND purpose = $2 AND is_verified = false
+      WHERE phone_number = $1 AND purpose = $2 
       ORDER BY created_at DESC LIMIT 1
     `;
     return await getOne(query, [cleanPhone, purpose]);
@@ -58,6 +58,8 @@ class OTP {
     
     // Get OTP record
     const otpRecord = await this.findByPhoneAndPurpose(phoneNumber, purpose);
+
+    console.log('OTP Record:', otpRecord,phoneNumber, otpCode, purpose);
     
     if (!otpRecord) {
       throw new Error('No valid OTP found. Please request a new OTP.');

@@ -5,7 +5,7 @@ const router = express.Router();
 const userAuthController = require('../controllers/auth/userAuthController');
 
 // Import middleware
-const userAuth = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 // Import validations
 const {
@@ -116,7 +116,7 @@ router.get('/otp-status',
  * @access  Private (User)
  */
 router.get('/profile', 
-  userAuth, 
+  authMiddleware, 
   userAuthController.getProfile
 );
 
@@ -126,7 +126,7 @@ router.get('/profile',
  * @access  Private (User)
  */
 router.put('/profile', 
-  userAuth, 
+  authMiddleware, 
   validateProfileUpdate, 
   userAuthController.updateProfile
 );
@@ -137,7 +137,7 @@ router.put('/profile',
  * @access  Private (User)
  */
 router.post('/send-phone-verification-otp', 
-  userAuth, 
+  authMiddleware, 
   validateSendPhoneVerificationOTP, 
   userAuthController.sendPhoneVerificationOTP
 );
@@ -148,7 +148,7 @@ router.post('/send-phone-verification-otp',
  * @access  Private (User)
  */
 router.post('/change-password', 
-  userAuth, 
+  authMiddleware, 
   validateChangePassword, 
   userAuthController.changePassword
 );
@@ -159,7 +159,7 @@ router.post('/change-password',
  * @access  Private (User)
  */
 router.post('/logout', 
-  userAuth, 
+  authMiddleware, 
   userAuthController.logout
 );
 

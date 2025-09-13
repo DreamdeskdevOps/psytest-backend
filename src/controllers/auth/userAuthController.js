@@ -11,9 +11,9 @@ const sendRegistrationOTP = async (req, res) => {
       return sendErrorResponse(res, 400, ERROR_MESSAGES.VALIDATION_FAILED, errors.array());
     }
 
-    const { phoneNumber, email } = req.body;
+    const { phoneNumber, email, firstName } = req.body;
 
-    const result = await authService.sendRegistrationOTP(phoneNumber, email);
+    const result = await authService.sendRegistrationOTP(phoneNumber, email, firstName);
 
     return sendSuccessResponse(res, 200, 'OTP sent successfully', {
       otpId: result.otpId,
