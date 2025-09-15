@@ -8,6 +8,8 @@ dotenv.config();
 const authRoutes = require('./routes/auth');
 const adminAuthRoutes = require('./routes/admin/auth');
 const adminTestRoutes = require('./routes/admin/tests');
+const adminSectionRoutes = require('./routes/admin/sections');
+const adminQuestionRoutes = require('./routes/admin/questions');
 // const testRoutes = require('./routes/tests');
 // const userRoutes = require('./routes/users');
 
@@ -22,6 +24,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/api/' + process.env.API_VERSION + '/auth', authRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/auth', adminAuthRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/tests', adminTestRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/sections', adminSectionRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/questions', adminQuestionRoutes);
+
 // app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
 // app.use('/api/' + process.env.API_VERSION + '/users', userRoutes);
 

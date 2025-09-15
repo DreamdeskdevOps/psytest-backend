@@ -17,66 +17,66 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET /api/admin/tests - List all tests (4 main tests)
+// GET /api/v1/admin/tests - List all tests (4 main tests)
 router.get('/',
   adminTestController.getAllTests
 );
 
-// GET /api/admin/tests/:id - Get test details with sections
+// GET /api/v1/admin/tests/:id - Get test details with sections
 router.get('/:id', 
  
   adminTestController.getTestDetails
 );
 
-// POST /api/admin/tests - Create new test
+// POST /api/v1/admin/tests - Create new test
 router.post('/', 
  
   adminTestController.createTest
 );
 
-// PUT /api/admin/tests/:id - Update test basic info
+// PUT /api/v1/admin/tests/:id - Update test basic info
 router.put('/:id', 
  
   adminTestController.updateTest
 );
 
-// DELETE /api/admin/tests/:id - Delete test
+// DELETE /api/v1/admin/tests/:id - Delete test
 router.delete('/:id', 
  
   adminTestController.deleteTest
 );
 
-// POST /api/admin/tests/:id/duplicate - Duplicate entire test
+// POST /api/v1/admin/tests/:id/duplicate - Duplicate entire test
 router.post('/:id/duplicate', 
  
   adminTestController.duplicateTest
 );
 
-// POST /api/admin/tests/:id/toggle-status - Activate/Deactivate test
+// POST /api/v1/admin/tests/:id/toggle-status - Activate/Deactivate test
 router.post('/:id/toggle-status', 
  
   adminTestController.toggleTestStatus
 );
 
-// GET /api/admin/tests/:id/preview - Preview entire test
+// GET /api/v1/admin/tests/:id/preview - Preview entire test
 router.get('/:id/preview', 
  
   adminTestController.getTestPreview
 );
 
-// POST /api/admin/tests/bulk-actions - Bulk operations
+// POST /api/v1/admin/tests/bulk-actions - Bulk operations
 router.post('/bulk-actions', 
  
   adminTestController.bulkActions
 );
 
-// GET /api/admin/tests/:id/export - Export test with all sections
+// GET /api/v1/admin/tests/:id/export - Export test with all sections
 router.get('/:id/export', 
  
   adminTestController.exportTest
 );
 
-// PUT /api/admin/tests/:id/reorder-sections - Reorder test sections
+// PUT /api/v1/admin/tests/:id/reorder-sections - Reorder test sections
 router.put('/:id/reorder-sections', 
  
   adminTestController.reorderSections

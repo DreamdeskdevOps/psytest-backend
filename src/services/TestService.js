@@ -269,7 +269,7 @@ const getTestPreview = async (testId, adminId) => {
         title: test.title,
         description: test.description,
         instructions: test.instructions,
-        duration_minutes: test.duration_minutes,
+        duration_minutes: test.total_duration,
         total_questions: test.total_questions,
         total_sections: test.total_sections,
         passing_score: test.passing_score

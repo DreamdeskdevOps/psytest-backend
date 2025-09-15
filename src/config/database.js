@@ -32,80 +32,78 @@ const connectDB = async () => {
 
 // Database utility functions
 const getOne = async (query, params = []) => {
-    // Convert $1, $2, etc. to ? placeholders for Sequelize
-    let sequelizeQuery = query;
-    for (let i = params.length; i >= 1; i--) {
-        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
-    }
-    
-    const [results] = await sequelize.query(sequelizeQuery, {
-        replacements: params,
-        type: Sequelize.QueryTypes.SELECT
+    const [results] = await sequelize.query(query, {
+        bind: params,
+        type: Sequelize.QueryTypes.SELECT,
+        raw: true
     });
     return results;
 };
 
 const getMany = async (query, params = []) => {
-    // Convert $1, $2, etc. to ? placeholders for Sequelize
-    let sequelizeQuery = query;
-    for (let i = params.length; i >= 1; i--) {
-        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
-    }
-    
-    const results = await sequelize.query(sequelizeQuery, {
-        replacements: params,
+    const results = await sequelize.query(query, {
+        bind: params,
         type: Sequelize.QueryTypes.SELECT
     });
     return results;
 };
 
 const insertOne = async (query, params = []) => {
-    // Convert $1, $2, etc. to ? placeholders for Sequelize
-    let sequelizeQuery = query;
-    for (let i = params.length; i >= 1; i--) {
-        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    // Check if query has RETURNING clause - if so, use SELECT type to get the returned data
+    if (query.toUpperCase().includes('RETURNING')) {
+        const [results] = await sequelize.query(query, {
+            bind: params,
+            type: Sequelize.QueryTypes.SELECT
+        });
+        return results;
+    } else {
+        const [results] = await sequelize.query(query, {
+            bind: params,
+            type: Sequelize.QueryTypes.INSERT
+        });
+        return results;
     }
-    
-    const [results] = await sequelize.query(sequelizeQuery, {
-        replacements: params,
-        type: Sequelize.QueryTypes.INSERT
-    });
-    return results;
 };
 
 const updateOne = async (query, params = []) => {
-    // Convert $1, $2, etc. to ? placeholders for Sequelize
-    let sequelizeQuery = query;
-    for (let i = params.length; i >= 1; i--) {
-        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    // Check if query has RETURNING clause - if so, use SELECT type to get the returned data
+    if (query.toUpperCase().includes('RETURNING')) {
+        const [results] = await sequelize.query(query, {
+            bind: params,
+            type: Sequelize.QueryTypes.SELECT
+        });
+        return results;
+    } else {
+        const [results] = await sequelize.query(query, {
+            bind: params,
+            type: Sequelize.QueryTypes.UPDATE
+        });
+        return results;
     }
-    
-    const [results] = await sequelize.query(sequelizeQuery, {
-        replacements: params,
-        type: Sequelize.QueryTypes.UPDATE
-    });
-    return results;
 };
 
 const deleteOne = async (query, params = []) => {
-    // Convert $1, $2, etc. to ? placeholders for Sequelize
-    let sequelizeQuery = query;
-    for (let i = params.length; i >= 1; i--) {
-        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    // Check if query has RETURNING clause - if so, use SELECT type to get the returned data
+    if (query.toUpperCase().includes('RETURNING')) {
+        const [results] = await sequelize.query(query, {
+            bind: params,
+            type: Sequelize.QueryTypes.SELECT
+        });
+        return results;
+    } else {
+        const [results] = await sequelize.query(query, {
+            bind: params,
+            type: Sequelize.QueryTypes.DELETE
+        });
+        return results;
     }
-    
-    const [results] = await sequelize.query(sequelizeQuery, {
-        replacements: params,
-        type: Sequelize.QueryTypes.DELETE
-    });
-    return results;
 };
 
 const executeQuery = async (query, params = []) => {
     // Convert $1, $2, etc. to ? placeholders for Sequelize
     let sequelizeQuery = query;
-    for (let i = params.length; i >= 1; i--) {
-        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i, 'g'), '?');
+    for (let i = 1; i <= params.length; i++) {
+        sequelizeQuery = sequelizeQuery.replace(new RegExp('\\$' + i + '(?!\\d)', 'g'), '?');
     }
     
     const results = await sequelize.query(sequelizeQuery, {

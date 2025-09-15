@@ -297,7 +297,7 @@ const validatePassword = (password) => {
 };
 
 
-// Add these validation functions to your existing validation.js file
+// Admin validation functions
 
 // Validate UUID format
 const validateUUID = (uuid) => {
@@ -336,14 +336,14 @@ const validateTestData = (testData) => {
 
   // Test type validation
   const allowedTestTypes = [
-    'PERSONALITY', 'CAREER_ASSESSMENT', 'SKILL_TEST', 'APTITUDE', 
+    'PERSONALITY', 'CAREER_ASSESSMENT', 'SKILL_TEST', 'APTITUDE',
     'COGNITIVE', 'BEHAVIORAL', 'CUSTOM'
   ];
-  
+
   if (!testType || !allowedTestTypes.includes(testType)) {
-    return { 
-      isValid: false, 
-      message: `Test type must be one of: ${allowedTestTypes.join(', ')}` 
+    return {
+      isValid: false,
+      message: `Test type must be one of: ${allowedTestTypes.join(', ')}`
     };
   }
 
@@ -376,9 +376,9 @@ const validateTestData = (testData) => {
 
 // Validate test section data
 const validateSectionData = (sectionData) => {
-  const { 
-    sectionName, questionCount, answerPattern, 
-    answerOptions, maxScore, timeLimitMinutes 
+  const {
+    sectionName, questionCount, answerPattern,
+    answerOptions, maxScore, timeLimitMinutes
   } = sectionData;
 
   // Section name validation
@@ -397,14 +397,14 @@ const validateSectionData = (sectionData) => {
 
   // Answer pattern validation
   const allowedPatterns = [
-    'ODD_EVEN', 'YES_NO', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 
+    'ODD_EVEN', 'YES_NO', 'MULTIPLE_CHOICE', 'TRUE_FALSE',
     'RATING_SCALE', 'LIKERT_SCALE', 'CUSTOM'
   ];
-  
+
   if (!answerPattern || !allowedPatterns.includes(answerPattern)) {
-    return { 
-      isValid: false, 
-      message: `Answer pattern must be one of: ${allowedPatterns.join(', ')}` 
+    return {
+      isValid: false,
+      message: `Answer pattern must be one of: ${allowedPatterns.join(', ')}`
     };
   }
 
@@ -412,6 +412,12 @@ const validateSectionData = (sectionData) => {
   if (answerPattern === 'MULTIPLE_CHOICE') {
     if (!answerOptions || answerOptions < 2 || answerOptions > 6) {
       return { isValid: false, message: 'Multiple choice must have between 2 and 6 options' };
+    }
+  }
+
+  if (answerPattern === 'LIKERT_SCALE') {
+    if (!answerOptions || answerOptions < 3 || answerOptions > 10) {
+      return { isValid: false, message: 'Likert scale must have between 3 and 10 points' };
     }
   }
 
@@ -430,12 +436,12 @@ const validateSectionData = (sectionData) => {
 
 // Validate bulk operation data
 const validateBulkOperation = (operation, testIds, operationData = {}) => {
-  const allowedOperations = ['activate', 'deactivate', 'delete', 'update_category'];
-  
+  const allowedOperations = ['activate', 'deactivate', 'delete', 'update_test_type'];
+
   if (!allowedOperations.includes(operation)) {
-    return { 
-      isValid: false, 
-      message: `Invalid operation. Allowed: ${allowedOperations.join(', ')}` 
+    return {
+      isValid: false,
+      message: `Invalid operation. Allowed: ${allowedOperations.join(', ')}`
     };
   }
 
@@ -450,16 +456,123 @@ const validateBulkOperation = (operation, testIds, operationData = {}) => {
   // Validate UUIDs
   const invalidIds = testIds.filter(id => !validateUUID(id));
   if (invalidIds.length > 0) {
-    return { 
-      isValid: false, 
-      message: `Invalid test ID format: ${invalidIds.slice(0, 5).join(', ')}${invalidIds.length > 5 ? '...' : ''}` 
+    return {
+      isValid: false,
+      message: `Invalid test ID format: ${invalidIds.slice(0, 5).join(', ')}${invalidIds.length > 5 ? '...' : ''}`
     };
   }
 
   // Operation-specific validation
-  if (operation === 'update_category') {
-    if (!operationData.category || operationData.category.trim().length < 2) {
-      return { isValid: false, message: 'Category is required for update_category operation' };
+  if (operation === 'update_test_type') {
+    const allowedTestTypes = [
+      'PERSONALITY', 'CAREER_ASSESSMENT', 'SKILL_TEST', 'APTITUDE',
+      'COGNITIVE', 'BEHAVIORAL', 'CUSTOM'
+    ];
+
+    if (!operationData.testType || !allowedTestTypes.includes(operationData.testType)) {
+      return {
+        isValid: false,
+        message: `Test type is required and must be one of: ${allowedTestTypes.join(', ')}`
+      };
+    }
+  }
+
+  return { isValid: true };
+};
+
+// Validate section reorder data
+const validateSectionReorder = (sectionOrders) => {
+  if (!Array.isArray(sectionOrders) || sectionOrders.length === 0) {
+    return { isValid: false, message: 'Section orders array is required' };
+  }
+
+  // Check for duplicates
+  const sectionIds = sectionOrders.map(order => order.sectionId);
+  const uniqueIds = new Set(sectionIds);
+  if (sectionIds.length !== uniqueIds.size) {
+    return { isValid: false, message: 'Duplicate section IDs found in reorder data' };
+  }
+
+  // Validate each order
+  for (let i = 0; i < sectionOrders.length; i++) {
+    const order = sectionOrders[i];
+
+    if (!order.sectionId || !validateUUID(order.sectionId)) {
+      return { isValid: false, message: `Invalid section ID at index ${i}` };
+    }
+
+    if (typeof order.newOrder !== 'number' || order.newOrder < 1) {
+      return { isValid: false, message: `Invalid new order at index ${i}. Must be positive number` };
+    }
+  }
+
+  return { isValid: true };
+};
+
+// Validate test section data for updates (partial validation)
+const validateSectionUpdateData = (updateData) => {
+  const {
+    sectionName, questionCount, answerPattern,
+    answerOptions, maxScore, timeLimitMinutes
+  } = updateData;
+
+  // Section name validation (only if provided)
+  if (sectionName !== undefined) {
+    if (!sectionName || sectionName.trim().length < 2) {
+      return { isValid: false, message: 'Section name must be at least 2 characters long' };
+    }
+
+    if (sectionName.trim().length > 100) {
+      return { isValid: false, message: 'Section name cannot exceed 100 characters' };
+    }
+  }
+
+  // Question count validation (only if provided)
+  if (questionCount !== undefined) {
+    if (!questionCount || questionCount < 1 || questionCount > 100) {
+      return { isValid: false, message: 'Question count must be between 1 and 100' };
+    }
+  }
+
+  // Answer pattern validation (only if provided)
+  if (answerPattern !== undefined) {
+    const allowedPatterns = [
+      'ODD_EVEN', 'YES_NO', 'MULTIPLE_CHOICE', 'TRUE_FALSE',
+      'RATING_SCALE', 'LIKERT_SCALE', 'CUSTOM'
+    ];
+
+    if (!answerPattern || !allowedPatterns.includes(answerPattern)) {
+      return {
+        isValid: false,
+        message: `Answer pattern must be one of: ${allowedPatterns.join(', ')}`
+      };
+    }
+
+    // Answer options validation (for multiple choice, only if answerPattern is provided)
+    if (answerPattern === 'MULTIPLE_CHOICE') {
+      if (!answerOptions || answerOptions < 2 || answerOptions > 6) {
+        return { isValid: false, message: 'Multiple choice must have between 2 and 6 options' };
+      }
+    }
+
+    if (answerPattern === 'LIKERT_SCALE') {
+      if (!answerOptions || answerOptions < 3 || answerOptions > 10) {
+        return { isValid: false, message: 'Likert scale must have between 3 and 10 points' };
+      }
+    }
+  }
+
+  // Max score validation (only if provided)
+  if (maxScore !== undefined) {
+    if (maxScore !== null && (maxScore < 1 || maxScore > 1000)) {
+      return { isValid: false, message: 'Max score must be between 1 and 1000' };
+    }
+  }
+
+  // Time limit validation (only if provided)
+  if (timeLimitMinutes !== undefined) {
+    if (timeLimitMinutes !== null && (timeLimitMinutes < 1 || timeLimitMinutes > 300)) {
+      return { isValid: false, message: 'Time limit must be between 1 and 300 minutes' };
     }
   }
 
@@ -467,8 +580,126 @@ const validateBulkOperation = (operation, testIds, operationData = {}) => {
 };
 
 
+// Additional validation functions
+const validateQuestionData = (questionData, isComplete = true) => {
+  const {
+    questionText, options, correctAnswer, marks,
+    difficultyLevel, questionType
+  } = questionData;
 
+  // Question text validation
+  if (isComplete && (!questionText || questionText.trim().length < 5)) {
+    return { isValid: false, message: 'Question text must be at least 5 characters long' };
+  }
+
+  if (questionText && questionText.trim().length > 1000) {
+    return { isValid: false, message: 'Question text cannot exceed 1000 characters' };
+  }
+
+  // Options validation (if provided)
+  if (options && Array.isArray(options)) {
+    if (options.length > 10) {
+      return { isValid: false, message: 'Questions cannot have more than 10 options' };
+    }
+
+    // Check for empty options
+    const emptyOptions = options.filter(option => !option || option.toString().trim().length === 0);
+    if (emptyOptions.length > 0) {
+      return { isValid: false, message: 'All options must have text content' };
+    }
+
+    // Check for duplicate options
+    const uniqueOptions = new Set(options.map(option => option.toString().toLowerCase().trim()));
+    if (uniqueOptions.size !== options.length) {
+      return { isValid: false, message: 'Question options must be unique' };
+    }
+  }
+
+  // Marks validation
+  if (marks !== undefined && (marks < 0 || marks > 100)) {
+    return { isValid: false, message: 'Question marks must be between 0 and 100' };
+  }
+
+  // Difficulty level validation
+  const allowedDifficulties = ['EASY', 'MEDIUM', 'HARD', 'EXPERT'];
+  if (difficultyLevel && !allowedDifficulties.includes(difficultyLevel)) {
+    return {
+      isValid: false,
+      message: `Difficulty level must be one of: ${allowedDifficulties.join(', ')}`
+    };
+  }
+
+  // Question type validation - match database constraints
+  const allowedQuestionTypes = ['STANDARD', 'TEXT', 'IMAGE', 'MIXED', 'SCENARIO', 'IMAGE_BASED', 'AUDIO_BASED', 'VIDEO_BASED'];
+  if (questionType && !allowedQuestionTypes.includes(questionType)) {
+    return {
+      isValid: false,
+      message: `Question type must be one of: ${allowedQuestionTypes.join(', ')}`
+    };
+  }
+
+  return { isValid: true };
+};
+
+// Validate question reorder data
+const validateQuestionReorder = (questionOrders) => {
+  if (!Array.isArray(questionOrders) || questionOrders.length === 0) {
+    return { isValid: false, message: 'Question orders array is required' };
+  }
+
+  // Check for duplicates
+  const questionIds = questionOrders.map(order => order.questionId);
+  const uniqueIds = new Set(questionIds);
+  if (questionIds.length !== uniqueIds.size) {
+    return { isValid: false, message: 'Duplicate question IDs found in reorder data' };
+  }
+
+  // Validate each order
+  for (let i = 0; i < questionOrders.length; i++) {
+    const order = questionOrders[i];
+
+    if (!order.questionId || !validateUUID(order.questionId)) {
+      return { isValid: false, message: `Invalid question ID at index ${i}` };
+    }
+
+    if (typeof order.newOrder !== 'number' || order.newOrder < 1) {
+      return { isValid: false, message: `Invalid new order at index ${i}. Must be positive number` };
+    }
+  }
+
+  return { isValid: true };
+};
+
+// Validate numbering style
+const validateNumberingStyle = (numberingConfig) => {
+  const { numberingStyle, numberingStart, numberingPrefix, numberingSuffix } = numberingConfig;
+
+  const allowedStyles = ['NUMERIC', 'ALPHA_LOWER', 'ALPHA_UPPER', 'ROMAN_LOWER', 'ROMAN_UPPER'];
+  if (numberingStyle && !allowedStyles.includes(numberingStyle)) {
+    return {
+      isValid: false,
+      message: `Numbering style must be one of: ${allowedStyles.join(', ')}`
+    };
+  }
+
+  if (numberingStart !== undefined && (numberingStart < 1 || numberingStart > 100)) {
+    return { isValid: false, message: 'Numbering start must be between 1 and 100' };
+  }
+
+  if (numberingPrefix && numberingPrefix.length > 5) {
+    return { isValid: false, message: 'Numbering prefix cannot exceed 5 characters' };
+  }
+
+  if (numberingSuffix && numberingSuffix.length > 5) {
+    return { isValid: false, message: 'Numbering suffix cannot exceed 5 characters' };
+  }
+
+  return { isValid: true };
+};
+
+// Export all validation functions
 module.exports = {
+  // User validation functions
   validateSendRegistrationOTP,
   validateUserRegistration,
   validateUserLogin,
@@ -486,9 +717,15 @@ module.exports = {
   validateEmail,
   validatePassword,
 
-    validateUUID,
+  // Admin validation functions
+  validateUUID,
   validatePagination,
   validateTestData,
   validateSectionData,
+  validateQuestionData,
   validateBulkOperation,
+  validateSectionReorder,
+  validateQuestionReorder,
+  validateNumberingStyle,
+  validateSectionUpdateData
 };
