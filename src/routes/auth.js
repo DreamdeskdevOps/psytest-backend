@@ -48,12 +48,31 @@ router.post('/register',
 
 /**
  * @route   POST /api/v1/auth/login
- * @desc    Login user
+ * @desc    Login user (direct login)
  * @access  Public
  */
-router.post('/login', 
-  validateUserLogin, 
+router.post('/login',
+  validateUserLogin,
   userAuthController.login
+);
+
+/**
+ * @route   POST /api/v1/auth/validate-credentials
+ * @desc    Validate credentials and send login OTP
+ * @access  Public
+ */
+router.post('/validate-credentials',
+  validateUserLogin,
+  userAuthController.validateCredentialsAndSendLoginOTP
+);
+
+/**
+ * @route   POST /api/v1/auth/complete-login
+ * @desc    Complete login with OTP verification
+ * @access  Public
+ */
+router.post('/complete-login',
+  userAuthController.completeLoginWithOTP
 );
 
 /**

@@ -697,6 +697,316 @@ const validateNumberingStyle = (numberingConfig) => {
   return { isValid: true };
 };
 
+// Validate answer option data
+const validateAnswerOptionData = (optionData, isComplete = true) => {
+  const {
+    optionText, optionValue, optionOrder, isCorrect, optionType
+  } = optionData;
+
+  // Option text validation
+  if (isComplete && (!optionText || optionText.toString().trim().length < 1)) {
+    return { isValid: false, message: 'Option text is required and cannot be empty' };
+  }
+
+  if (optionText && optionText.toString().trim().length > 500) {
+    return { isValid: false, message: 'Option text cannot exceed 500 characters' };
+  }
+
+  // Option value validation (if provided)
+  if (optionValue && optionValue.toString().trim().length > 100) {
+    return { isValid: false, message: 'Option value cannot exceed 100 characters' };
+  }
+
+  // Option order validation (if provided)
+  if (optionOrder !== undefined && (typeof optionOrder !== 'number' || optionOrder < 1 || optionOrder > 50)) {
+    return { isValid: false, message: 'Option order must be a number between 1 and 50' };
+  }
+
+  // Is correct validation (if provided)
+  if (isCorrect !== undefined && typeof isCorrect !== 'boolean') {
+    return { isValid: false, message: 'isCorrect must be a boolean value' };
+  }
+
+  // Option type validation (if provided)
+  const allowedOptionTypes = ['STANDARD', 'IMAGE', 'AUDIO', 'VIDEO', 'MIXED'];
+  if (optionType && !allowedOptionTypes.includes(optionType)) {
+    return {
+      isValid: false,
+      message: `Option type must be one of: ${allowedOptionTypes.join(', ')}`
+    };
+  }
+
+  return { isValid: true };
+};
+
+
+//  * Validate configuration data for answer patterns
+//  */
+// const validateConfigurationData = (configData) => {
+//   if (!configData || typeof configData !== 'object') {
+//     return { isValid: false, message: 'Configuration data is required and must be an object' };
+//   }
+
+//   // Validate pattern name if provided
+//   if (configData.patternName) {
+//     if (typeof configData.patternName !== 'string' || configData.patternName.trim().length === 0) {
+//       return { isValid: false, message: 'Pattern name must be a non-empty string' };
+//     }
+//     if (configData.patternName.length > 100) {
+//       return { isValid: false, message: 'Pattern name cannot exceed 100 characters' };
+//     }
+    
+//     // Validate pattern name format (uppercase with underscores)
+//     const patternNameRegex = /^[A-Z_][A-Z0-9_]*$/;
+//     if (!patternNameRegex.test(configData.patternName)) {
+//       return { isValid: false, message: 'Pattern name must be uppercase with underscores (e.g., MY_CUSTOM_PATTERN)' };
+//     }
+//   }
+
+//   // Validate display name if provided
+//   if (configData.displayName) {
+//     if (typeof configData.displayName !== 'string' || configData.displayName.trim().length === 0) {
+//       return { isValid: false, message: 'Display name must be a non-empty string' };
+//     }
+//     if (configData.displayName.length > 200) {
+//       return { isValid: false, message: 'Display name cannot exceed 200 characters' };
+//     }
+//   }
+
+//   // Validate configuration object
+//   if (configData.configuration) {
+//     if (typeof configData.configuration !== 'object') {
+//       return { isValid: false, message: 'Configuration must be an object' };
+//     }
+    
+//     const config = configData.configuration;
+    
+//     if (config.scalePoints && (typeof config.scalePoints !== 'number' || config.scalePoints < 2 || config.scalePoints > 10)) {
+//       return { isValid: false, message: 'Scale points must be a number between 2 and 10' };
+//     }
+    
+//     if (config.categories && (!Array.isArray(config.categories) || config.categories.length === 0)) {
+//       return { isValid: false, message: 'Categories must be a non-empty array' };
+//     }
+//   }
+
+//   return { isValid: true };
+// };
+
+/**
+ * Validate section configuration data for advanced settings
+ */
+const validateAdvancedSectionConfigData = (configData) => {
+  if (!configData || typeof configData !== 'object') {
+    return { isValid: false, message: 'Section configuration data is required and must be an object' };
+  }
+
+  // Validate timing config
+  if (configData.timingConfig) {
+    if (typeof configData.timingConfig !== 'object') {
+      return { isValid: false, message: 'Timing config must be an object' };
+    }
+    
+    const timing = configData.timingConfig;
+    if (timing.timeLimitMinutes && (typeof timing.timeLimitMinutes !== 'number' || timing.timeLimitMinutes < 1 || timing.timeLimitMinutes > 300)) {
+      return { isValid: false, message: 'Time limit must be between 1 and 300 minutes' };
+    }
+  }
+
+  // Validate scoring config
+  if (configData.scoringConfig) {
+    if (typeof configData.scoringConfig !== 'object') {
+      return { isValid: false, message: 'Scoring config must be an object' };
+    }
+    
+    const scoring = configData.scoringConfig;
+    if (scoring.pointsPerQuestion && (typeof scoring.pointsPerQuestion !== 'number' || scoring.pointsPerQuestion < 0)) {
+      return { isValid: false, message: 'Points per question must be a non-negative number' };
+    }
+  }
+
+  return { isValid: true };
+};
+
+/**
+ * Validate scoring rules data for configuration
+ */
+const validateConfigScoringRulesData = (scoringData) => {
+  if (!scoringData || typeof scoringData !== 'object') {
+    return { isValid: false, message: 'Scoring data is required and must be an object' };
+  }
+
+  if (!scoringData.scoringMethod) {
+    return { isValid: false, message: 'Scoring method is required' };
+  }
+
+  const allowedMethods = [
+    'CORRECT_INCORRECT', 'WEIGHTED', 'PARTIAL_CREDIT', 'AVERAGE', 'SUM',
+    'COUNT_YES', 'COUNT_NO', 'BINARY', 'HIGHER_WINS', 'CATEGORY_SUM', 
+    'BALANCED', 'STANDARD'
+  ];
+
+  if (!allowedMethods.includes(scoringData.scoringMethod)) {
+    return { isValid: false, message: `Invalid scoring method. Allowed: ${allowedMethods.join(', ')}` };
+  }
+
+  return { isValid: true };
+};
+
+/**
+ * Validate timing configuration data
+ */
+const validateConfigTimingData = (timingData) => {
+  if (!timingData || typeof timingData !== 'object') {
+    return { isValid: false, message: 'Timing data is required and must be an object' };
+  }
+
+  if (!timingData.timeLimitMinutes) {
+    return { isValid: false, message: 'Time limit minutes is required' };
+  }
+
+  if (typeof timingData.timeLimitMinutes !== 'number' || timingData.timeLimitMinutes < 1 || timingData.timeLimitMinutes > 300) {
+    return { isValid: false, message: 'Time limit must be between 1 and 300 minutes' };
+  }
+
+  return { isValid: true };
+};
+
+/**
+ * Validate overall test timing data
+ */
+const validateOverallTestTimingData = (timingData) => {
+  if (!timingData || typeof timingData !== 'object') {
+    return { isValid: false, message: 'Test timing data is required and must be an object' };
+  }
+
+  if (!timingData.durationMinutes) {
+    return { isValid: false, message: 'Duration minutes is required' };
+  }
+
+  if (typeof timingData.durationMinutes !== 'number' || timingData.durationMinutes < 5 || timingData.durationMinutes > 600) {
+    return { isValid: false, message: 'Test duration must be between 5 and 600 minutes' };
+  }
+
+  return { isValid: true };
+};
+
+// ==================== MIDDLEWARE VALIDATION ====================
+
+/**
+ * Validate request body against schema
+ */
+const validateRequestBody = (schema) => {
+  return (req, res, next) => {
+    const validation = validateAgainstSchema(req.body, schema);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: validation.message,
+        data: null,
+        statusCode: 400
+      });
+    }
+    next();
+  };
+};
+
+/**
+ * Validate request params
+ */
+const validateRequestParams = (paramValidations) => {
+  return (req, res, next) => {
+    for (const [param, validation] of Object.entries(paramValidations)) {
+      const value = req.params[param];
+      
+      if (!value && validation.required) {
+        return res.status(400).json({
+          success: false,
+          message: `Parameter '${param}' is required`,
+          data: null,
+          statusCode: 400
+        });
+      }
+
+      if (value) {
+        if (validation.type === 'number' && isNaN(Number(value))) {
+          return res.status(400).json({
+            success: false,
+            message: `Parameter '${param}' must be a number`,
+            data: null,
+            statusCode: 400
+          });
+        }
+
+        if (validation.type === 'uuid' && !validateUUID(value)) {
+          return res.status(400).json({
+            success: false,
+            message: `Parameter '${param}' must be a valid UUID`,
+            data: null,
+            statusCode: 400
+          });
+        }
+      }
+    }
+    next();
+  };
+};
+
+
+
+const validateConfigurationData = (configData) => {
+  if (!configData || typeof configData !== 'object') {
+    return { isValid: false, message: 'Configuration data is required and must be an object' };
+  }
+
+  // Validate pattern name if provided
+  if (configData.patternName) {
+    if (typeof configData.patternName !== 'string' || configData.patternName.trim().length === 0) {
+      return { isValid: false, message: 'Pattern name must be a non-empty string' };
+    }
+    if (configData.patternName.length > 100) {
+      return { isValid: false, message: 'Pattern name cannot exceed 100 characters' };
+    }
+    
+    // Validate pattern name format (uppercase with underscores)
+    const patternNameRegex = /^[A-Z_][A-Z0-9_]*$/;
+    if (!patternNameRegex.test(configData.patternName)) {
+      return { isValid: false, message: 'Pattern name must be uppercase with underscores (e.g., MY_CUSTOM_PATTERN)' };
+    }
+  }
+
+  // Validate display name if provided
+  if (configData.displayName) {
+    if (typeof configData.displayName !== 'string' || configData.displayName.trim().length === 0) {
+      return { isValid: false, message: 'Display name must be a non-empty string' };
+    }
+    if (configData.displayName.length > 200) {
+      return { isValid: false, message: 'Display name cannot exceed 200 characters' };
+    }
+  }
+
+  // Validate configuration object
+  if (configData.configuration) {
+    if (typeof configData.configuration !== 'object') {
+      return { isValid: false, message: 'Configuration must be an object' };
+    }
+    
+    const config = configData.configuration;
+    
+    if (config.scalePoints && (typeof config.scalePoints !== 'number' || config.scalePoints < 2 || config.scalePoints > 10)) {
+      return { isValid: false, message: 'Scale points must be a number between 2 and 10' };
+    }
+    
+    if (config.categories && (!Array.isArray(config.categories) || config.categories.length === 0)) {
+      return { isValid: false, message: 'Categories must be a non-empty array' };
+    }
+  }
+
+  return { isValid: true };
+};
+
+
+
 // Export all validation functions
 module.exports = {
   // User validation functions
@@ -723,9 +1033,20 @@ module.exports = {
   validateTestData,
   validateSectionData,
   validateQuestionData,
+  validateAnswerOptionData,
   validateBulkOperation,
   validateSectionReorder,
   validateQuestionReorder,
   validateNumberingStyle,
-  validateSectionUpdateData
+  validateSectionUpdateData,
+
+
+  validateConfigurationData,
+  validateAdvancedSectionConfigData,
+  validateConfigScoringRulesData,
+  validateConfigTimingData,
+  validateOverallTestTimingData 
+
+
+
 };

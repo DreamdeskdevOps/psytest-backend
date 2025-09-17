@@ -13,17 +13,19 @@ class User {
       email,
       password,
       phoneNumber,
+      age,
+      gender,
+      schoolName,
+      class: className,
       avatar = null,
-      dateOfBirth = null,
-      gender = null,
       address = {}
     } = userData;
 
     const query = `
       INSERT INTO ${this.tableName} (
-        first_name, last_name, email, password, phone_number,
-        avatar, date_of_birth, gender, address, is_email_verified
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        first_name, last_name, email, password, phone_number, age, gender, school_name, class,
+        avatar, address, is_email_verified
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id, first_name, last_name, email, phone_number, 
                 is_email_verified, subscription_type, created_at
     `;
@@ -34,9 +36,11 @@ class User {
       email.toLowerCase(),
       password,
       phoneNumber,
-      avatar,
-      dateOfBirth,
+      age,
       gender,
+      schoolName,
+      className,
+      avatar,
       JSON.stringify(address),
       true // Phone verified during registration
     ];

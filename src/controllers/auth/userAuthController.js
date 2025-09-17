@@ -38,10 +38,25 @@ const register = async (req, res) => {
 
     const result = await authService.registerUser(req.body);
 
+    // Set HTTP-only cookies for tokens
+    res.cookie('token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    if (result.refreshToken) {
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+    }
+
     return sendSuccessResponse(res, 201, SUCCESS_MESSAGES.REGISTRATION_SUCCESS, {
       user: result.user,
-      token: result.token,
-      refreshToken: result.refreshToken,
       phoneVerified: true
     });
 
@@ -62,10 +77,25 @@ const login = async (req, res) => {
     const { email, password } = req.body;
     const result = await authService.loginUser(email, password, req.ip, req.get('User-Agent'));
 
+    // Set HTTP-only cookies for tokens
+    res.cookie('token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    if (result.refreshToken) {
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+    }
+
     return sendSuccessResponse(res, 200, SUCCESS_MESSAGES.LOGIN_SUCCESS, {
-      user: result.user,
-      token: result.token,
-      refreshToken: result.refreshToken
+      user: result.user
     });
 
   } catch (error) {
@@ -256,10 +286,17 @@ const logout = async (req, res) => {
     const userId = req.user.id;
     await authService.logoutUser(userId);
 
+    // Clear cookies
+    res.clearCookie('token');
+    res.clearCookie('refreshToken');
+
     return sendSuccessResponse(res, 200, SUCCESS_MESSAGES.LOGOUT_SUCCESS);
 
   } catch (error) {
     console.error('Logout error:', error);
+    // Even if logout fails on server, clear cookies
+    res.clearCookie('token');
+    res.clearCookie('refreshToken');
     return sendErrorResponse(res, 500, 'Logout failed');
   }
 };
@@ -283,6 +320,71 @@ const getOTPStatus = async (req, res) => {
   }
 };
 
+// Validate credentials and send login OTP
+const validateCredentialsAndSendLoginOTP = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return sendErrorResponse(res, 400, ERROR_MESSAGES.VALIDATION_FAILED, errors.array());
+    }
+
+    const { email, password } = req.body;
+    const result = await authService.validateCredentialsAndSendLoginOTP(email, password);
+
+    return sendSuccessResponse(res, 200, 'Credentials validated. OTP sent for verification', {
+      otpId: result.otpId,
+      phoneNumber: result.phoneNumber,
+      expiresAt: result.expiresAt,
+      userId: result.userId,
+      message: 'Please verify your identity with the OTP sent to your registered phone number'
+    });
+
+  } catch (error) {
+    console.error('Validate credentials and send OTP error:', error);
+    const statusCode = error.message.includes('Invalid') || error.message.includes('blocked') || error.message.includes('deactivated') ? 401 : 500;
+    return sendErrorResponse(res, statusCode, error.message || 'Failed to send login OTP');
+  }
+};
+
+// Complete login with OTP verification
+const completeLoginWithOTP = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return sendErrorResponse(res, 400, ERROR_MESSAGES.VALIDATION_FAILED, errors.array());
+    }
+
+    const { phoneNumber, otpCode, userId } = req.body;
+    const result = await authService.completeLoginWithOTP(phoneNumber, otpCode, userId);
+
+    // Set HTTP-only cookies for tokens
+    res.cookie('token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    if (result.refreshToken) {
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+    }
+
+    return sendSuccessResponse(res, 200, SUCCESS_MESSAGES.LOGIN_SUCCESS, {
+      user: result.user
+    });
+
+  } catch (error) {
+    console.error('Complete login with OTP error:', error);
+    const statusCode = error.message.includes('Invalid') || error.message.includes('expired') ? 401 : 500;
+    return sendErrorResponse(res, statusCode, error.message || 'Login verification failed');
+  }
+};
+
 module.exports = {
   sendRegistrationOTP,
   register,
@@ -296,5 +398,7 @@ module.exports = {
   sendPhoneVerificationOTP,
   changePassword,
   logout,
-  getOTPStatus
+  getOTPStatus,
+  validateCredentialsAndSendLoginOTP,
+  completeLoginWithOTP
 };

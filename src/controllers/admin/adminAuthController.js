@@ -34,20 +34,20 @@ const login = async (req, res) => {
       userAgent
     );
 
-    // Set secure HTTP-only cookie for token (optional)
+    // Set secure HTTP-only cookie for token
     if (result.success && result.data?.token) {
       res.cookie('adminToken', result.data.token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
     }
 
     return res.status(result.statusCode).json({
       success: result.success,
       message: result.message,
-      data: result.data
+      data: result.data ? { admin: result.data.admin } : null // Don't send token to frontend
     });
 
   } catch (error) {
@@ -93,21 +93,27 @@ const logout = async (req, res) => {
 const getProfile = async (req, res) => {
   try {
     const adminId = req.admin.id; // From auth middleware
-
-    // Call service
     const result = await AdminAuthService.getAdminProfile(adminId);
 
-    return res.status(result.statusCode).json({
-      success: result.success,
-      message: result.message,
-      data: result.data
-    });
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        message: 'Profile retrieved successfully',
+        data: { admin: result.data }
+      });
+    } else {
+      return res.status(result.statusCode).json({
+        success: false,
+        message: result.message,
+        data: null
+      });
+    }
 
   } catch (error) {
     console.error('Get admin profile controller error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
+      message: 'Failed to get profile',
       data: null
     });
   }

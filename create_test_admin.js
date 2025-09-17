@@ -9,7 +9,7 @@ async function createTestAdmin() {
     console.log('✅ Connected to database');
 
     // Hash password
-    const hashedPassword = await bcrypt.hash('admin123', 12);
+    const hashedPassword = await bcrypt.hash('Boom#123', 12);
 
     // Create test admin using raw SQL (since table might not be fully synced)
     const [results] = await sequelize.query(`
@@ -40,7 +40,7 @@ async function createTestAdmin() {
 
     console.log('✅ Test admin created/updated successfully:');
     console.log('   📧 Email: admin@test.com');
-    console.log('   🔑 Password: admin123');
+    console.log('   🔑 Password: Boom#123');
     console.log('   📱 Phone: 9876543210');
     console.log('\n🎯 Now you can test the password reset flow!');
     

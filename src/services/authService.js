@@ -57,7 +57,7 @@ class AuthService {
 
   // Register user with OTP verification
   async registerUser(userData) {
-    const { firstName, lastName, email, password, phoneNumber, otpCode } = userData;
+    const { firstName, lastName, email, password, phoneNumber, otpCode, age, gender, schoolName, class: className } = userData;
 
     console.log('Registering user with data:', { firstName, lastName, email, phoneNumber, otpCode });
 
@@ -82,7 +82,11 @@ class AuthService {
       lastName,
       email,
       password: hashedPassword,
-      phoneNumber
+      phoneNumber,
+      age,
+      gender,
+      schoolName,
+      class: className
     });
 
     // Generate tokens
@@ -109,11 +113,17 @@ class AuthService {
   }
 
   // Login user
-  async loginUser(email, password, ipAddress, userAgent) {
-    // Find user
-    const user = await User.findByEmail(email);
+  async loginUser(loginIdentifier, password, ipAddress, userAgent) {
+    let user;
+    // Check if loginIdentifier is an email or a phone number
+    if (loginIdentifier.includes('@')) {
+      user = await User.findByEmail(loginIdentifier);
+    } else {
+      user = await User.findByPhone(loginIdentifier);
+    }
+
     if (!user) {
-      throw new Error('Invalid email or password');
+      throw new Error('Invalid credentials');
     }
 
     // Check user status
@@ -128,7 +138,7 @@ class AuthService {
     // Verify password
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
-      throw new Error('Invalid email or password');
+      throw new Error('Invalid credentials');
     }
 
     // Update last login
@@ -424,6 +434,123 @@ class AuthService {
   // Get OTP status
   async getOTPStatus(phoneNumber, purpose) {
     return await OTP.getStatus(phoneNumber, purpose);
+  }
+
+  // Validate credentials and send login OTP
+  async validateCredentialsAndSendLoginOTP(email, password) {
+    // Find user by email
+    const user = await User.findByEmail(email);
+
+    if (!user) {
+      throw new Error('Invalid credentials');
+    }
+
+    // Check user status
+    if (!user.is_active) {
+      throw new Error('Account is deactivated');
+    }
+
+    if (user.is_blocked) {
+      throw new Error('Account is blocked');
+    }
+
+    // Verify password
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      throw new Error('Invalid credentials');
+    }
+
+    // Credentials are valid, now send login OTP to user's phone
+    const phoneNumber = user.phone_number;
+
+    if (!phoneNumber) {
+      throw new Error('No phone number associated with this account');
+    }
+
+    // Check for recent OTP
+    const recentOTP = await OTP.findRecentOTP(phoneNumber, 'login');
+    if (recentOTP) {
+      throw new Error('Please wait 2 minutes before requesting another OTP');
+    }
+
+    // Generate and send OTP
+    const otpCode = smsService.generateOTP();
+
+    // Delete any existing OTPs for this phone and purpose
+    await OTP.deleteByPhoneAndPurpose(phoneNumber, 'login');
+
+    // Create new OTP record
+    const otpRecord = await OTP.create({
+      phoneNumber,
+      email: user.email,
+      otpCode,
+      purpose: 'login'
+    });
+
+    // Send SMS
+    const smsResult = await smsService.sendOTP(phoneNumber, otpCode, 'login');
+
+    if (!smsResult.success) {
+      await OTP.delete(otpRecord.id);
+      throw new Error('Failed to send OTP. Please try again.');
+    }
+
+    return {
+      otpId: otpRecord.id,
+      phoneNumber: phoneNumber,
+      expiresAt: otpRecord.expires_at,
+      userId: user.id
+    };
+  }
+
+  // Complete login with OTP verification
+  async completeLoginWithOTP(phoneNumber, otpCode, userId) {
+    // Verify OTP
+    const otpVerification = await OTP.verify(phoneNumber, otpCode, 'login');
+
+    if (!otpVerification.success) {
+      throw new Error('Invalid or expired OTP');
+    }
+
+    // Get user data
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update last login
+    await User.updateLastLogin(user.id);
+
+    // Generate tokens
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      type: 'user'
+    });
+
+    const refreshToken = generateRefreshToken({
+      id: user.id,
+      email: user.email,
+      type: 'user'
+    });
+
+    // Log activity
+    await UserActivityLog.create({
+      userId: user.id,
+      activityType: 'login',
+      description: 'User logged in with OTP verification'
+    });
+
+    // Clean up OTP
+    await OTP.cleanupOldOTPs(phoneNumber, 'login', false);
+
+    // Return user data and tokens
+    const { password: _, ...userWithoutPassword } = user;
+    return {
+      user: userWithoutPassword,
+      token,
+      refreshToken
+    };
   }
 
   // Logout user

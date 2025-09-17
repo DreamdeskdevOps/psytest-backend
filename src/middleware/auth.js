@@ -4,7 +4,13 @@ const { promisify } = require('util');
 
 const authMiddleware = async (req, res, next) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        // First try to get token from cookies, then fallback to Authorization header
+        let token = req.cookies?.token;
+
+        if (!token) {
+            token = req.headers.authorization?.split(' ')[1];
+        }
+
         if (!token) {
             return res.status(401).json({ message: 'Unauthorized: No token provided' });
         }
@@ -40,12 +46,18 @@ const generateRefreshToken = (payload) => {
 
 const authenticateAdmin = async (req, res, next) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        // First try to get token from cookies, then fallback to Authorization header
+        let token = req.cookies?.adminToken;
+
         if (!token) {
-            return res.status(401).json({ 
+            token = req.headers.authorization?.split(' ')[1];
+        }
+
+        if (!token) {
+            return res.status(401).json({
                 success: false,
                 message: 'Unauthorized: No token provided',
-                data: null 
+                data: null
             });
         }
 
@@ -53,17 +65,36 @@ const authenticateAdmin = async (req, res, next) => {
         req.admin = decoded; // Use req.admin instead of req.user for admin routes
         next();
     } catch (error) {
-        return res.status(401).json({ 
+        return res.status(401).json({
             success: false,
             message: 'Unauthorized: Invalid token',
-            data: null 
+            data: null
         });
     }
+};
+
+// Permission checking middleware
+const checkPermission = (requiredPermission) => {
+    return (req, res, next) => {
+        // For now, we'll allow all authenticated admins to perform all actions
+        // In a production environment, you would implement proper role-based permissions
+        if (!req.admin) {
+            return res.status(401).json({
+                success: false,
+                message: 'Unauthorized: Admin authentication required',
+                data: null
+            });
+        }
+        
+        // Simple permission check - in a real app, you would check against user roles/permissions
+        next();
+    };
 };
 
 module.exports = {
     authMiddleware,
     authenticateAdmin,
+    checkPermission,
     hashPassword,
     comparePassword,
     generateToken,
