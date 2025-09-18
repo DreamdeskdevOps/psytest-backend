@@ -524,11 +524,11 @@ const setSectionTimeLimit = async (req, res) => {
       flexibleTiming
     } = req.body;
 
-    // Basic validation
-    if (!timeLimitMinutes || timeLimitMinutes < 1) {
+    // Basic validation - allow 0 for flexible timing
+    if (timeLimitMinutes === undefined || timeLimitMinutes === null || timeLimitMinutes < 0) {
       return res.status(400).json({
         success: false,
-        message: 'Valid time limit in minutes is required',
+        message: 'Valid time limit in minutes is required (0 for flexible timing)',
         data: null
       });
     }

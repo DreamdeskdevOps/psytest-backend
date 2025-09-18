@@ -523,13 +523,11 @@ const setSectionTimeLimit = async (sectionId, timingData, adminId) => {
 
   const query = `
     UPDATE test_sections
-    SET 
+    SET
       time_limit_minutes = $2,
-      timing_config = $3,
-      updated_by = $4,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
-    RETURNING id, section_name, time_limit_minutes, timing_config
+    RETURNING id, section_name, time_limit_minutes
   `;
 
   const timingConfig = {
@@ -541,47 +539,43 @@ const setSectionTimeLimit = async (sectionId, timingData, adminId) => {
     lastUpdated: new Date().toISOString()
   };
 
-  const values = [sectionId, timeLimitMinutes, JSON.stringify(timingConfig), adminId];
-  
+  const values = [sectionId, timeLimitMinutes];
+
   const result = await getOne(query, values);
-  
+
+  // Return the result with timing config if needed
   if (result) {
-    result.timing_config = result.timing_config ? JSON.parse(result.timing_config) : {};
+    result.timing_config = timingConfig;
   }
-  
+
   return result;
 };
 
 // Get section time settings
 const getSectionTimeSettings = async (sectionId) => {
   const query = `
-    SELECT 
-      s.id, s.section_name, s.time_limit_minutes, s.timing_config,
-      s.question_count,
-      
-      -- Calculate time per question if set
-      CASE 
-        WHEN s.time_limit_minutes IS NOT NULL AND s.question_count > 0 
-        THEN (s.time_limit_minutes::DECIMAL / s.question_count)::DECIMAL(5,2)
-        ELSE NULL
-      END as calculated_time_per_question,
-      
-      -- Test timing context
-      t.duration_minutes as test_total_duration,
-      (SELECT SUM(time_limit_minutes) FROM test_sections 
-       WHERE test_id = s.test_id AND id != s.id AND is_active = true) as other_sections_time
-       
-    FROM test_sections s
-    JOIN tests t ON s.test_id = t.id
-    WHERE s.id = $1 AND s.is_active = true
+    SELECT
+      id, section_name, time_limit_minutes, question_count
+    FROM test_sections
+    WHERE id = $1 AND is_active = true
   `;
-  
+
   const result = await getOne(query, [sectionId]);
-  
+
   if (result) {
-    result.timing_config = result.timing_config ? JSON.parse(result.timing_config) : {};
+    // Add calculated fields and timing config
+    result.calculated_time_per_question = result.time_limit_minutes && result.question_count > 0
+      ? (result.time_limit_minutes / result.question_count).toFixed(2)
+      : null;
+
+    result.timing_config = {
+      warningThresholds: [75, 90],
+      autoSubmit: true,
+      gracePeriod: 30,
+      flexibleTiming: false
+    };
   }
-  
+
   return result;
 };
 
@@ -594,13 +588,10 @@ const setOverallTestTiming = async (testId, timingData, adminId) => {
 
   const query = `
     UPDATE tests
-    SET 
-      duration_minutes = $2,
-      timing_config = $3,
-      updated_by = $4,
-      updated_at = CURRENT_TIMESTAMP
+    SET
+      total_duration = $2
     WHERE id = $1
-    RETURNING id, title, duration_minutes, timing_config
+    RETURNING id, title, total_duration as duration_minutes
   `;
 
   const testTimingConfig = {
@@ -624,12 +615,12 @@ const setOverallTestTiming = async (testId, timingData, adminId) => {
     lastUpdated: new Date().toISOString()
   };
 
-  const values = [testId, durationMinutes, JSON.stringify(testTimingConfig), adminId];
+  const values = [testId, durationMinutes];
   
   const result = await getOne(query, values);
   
   if (result) {
-    result.timing_config = result.timing_config ? JSON.parse(result.timing_config) : {};
+    result.timing_config = testTimingConfig;
   }
   
   return result;

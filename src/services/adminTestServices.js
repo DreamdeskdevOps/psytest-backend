@@ -41,8 +41,20 @@ const getTestDetails = async (testId, adminId) => {
         showCorrectAnswers: test.show_correct_answers || false
       },
       sections: test.sections || [],
-      tags: test.tags && typeof test.tags === 'string' ? JSON.parse(test.tags) : (test.tags || []),
-      premium_features: test.premium_features && typeof test.premium_features === 'string' ? JSON.parse(test.premium_features) : (test.premium_features || [])
+      tags: (() => {
+        try {
+          return test.tags && typeof test.tags === 'string' ? JSON.parse(test.tags) : (test.tags || []);
+        } catch (e) {
+          return test.tags || [];
+        }
+      })(),
+      premium_features: (() => {
+        try {
+          return test.premium_features && typeof test.premium_features === 'string' ? JSON.parse(test.premium_features) : (test.premium_features || []);
+        } catch (e) {
+          return test.premium_features || [];
+        }
+      })()
     };
 
     return generateResponse(true, 'Test details retrieved successfully', testData, 200);
@@ -83,8 +95,20 @@ const createTest = async (testData, adminId, ipAddress, userAgent) => {
         shuffleQuestions: newTest.randomize_questions || false,
         showCorrectAnswers: newTest.show_correct_answers || false
       },
-      tags: newTest.tags ? JSON.parse(newTest.tags) : [],
-      premium_features: newTest.premium_features ? JSON.parse(newTest.premium_features) : []
+      tags: (() => {
+        try {
+          return newTest.tags && newTest.tags.trim() ? JSON.parse(newTest.tags) : [];
+        } catch (e) {
+          return [];
+        }
+      })(),
+      premium_features: (() => {
+        try {
+          return newTest.premium_features && newTest.premium_features.trim() ? JSON.parse(newTest.premium_features) : [];
+        } catch (e) {
+          return [];
+        }
+      })()
     };
 
     return generateResponse(true, 'Test created successfully', responseData, 201);
@@ -126,6 +150,10 @@ const updateTest = async (testId, updateData, adminId, ipAddress, userAgent) => 
     // Update the test
     const updatedTest = await TestModel.updateTestConfig(testId, updateData, adminId);
 
+    if (!updatedTest) {
+      return generateResponse(false, 'Failed to update test - test not found or update failed', null, 404);
+    }
+
     // Log admin activity
     // await TestModel.logAdminActivity(adminId, 'TEST_UPDATE', {
     //   testId: testId,
@@ -136,14 +164,21 @@ const updateTest = async (testId, updateData, adminId, ipAddress, userAgent) => 
 
     const responseData = {
       ...updatedTest,
-      settings: updatedTest.settings ? JSON.parse(updatedTest.settings) : {}
+      settings: (() => {
+        try {
+          return updatedTest.settings && updatedTest.settings.trim() ? JSON.parse(updatedTest.settings) : {};
+        } catch (e) {
+          return {};
+        }
+      })()
     };
 
     return generateResponse(true, 'Test updated successfully', responseData, 200);
 
   } catch (error) {
     console.error('Update test service error:', error);
-    return generateResponse(false, 'Failed to update test', null, 500);
+    console.error('Error details:', error.message);
+    return generateResponse(false, `Failed to update test: ${error.message}`, null, 500);
   }
 };
 
@@ -223,8 +258,20 @@ const duplicateTest = async (originalId, newTitle, adminId, ipAddress, userAgent
           shuffleQuestions: duplicatedTest.randomize_questions || false,
           showCorrectAnswers: duplicatedTest.show_correct_answers || false
         },
-        tags: duplicatedTest.tags && typeof duplicatedTest.tags === 'string' ? JSON.parse(duplicatedTest.tags) : (duplicatedTest.tags || []),
-        premium_features: duplicatedTest.premium_features && typeof duplicatedTest.premium_features === 'string' ? JSON.parse(duplicatedTest.premium_features) : (duplicatedTest.premium_features || [])
+        tags: (() => {
+          try {
+            return duplicatedTest.tags && typeof duplicatedTest.tags === 'string' ? JSON.parse(duplicatedTest.tags) : (duplicatedTest.tags || []);
+          } catch (e) {
+            return duplicatedTest.tags || [];
+          }
+        })(),
+        premium_features: (() => {
+          try {
+            return duplicatedTest.premium_features && typeof duplicatedTest.premium_features === 'string' ? JSON.parse(duplicatedTest.premium_features) : (duplicatedTest.premium_features || []);
+          } catch (e) {
+            return duplicatedTest.premium_features || [];
+          }
+        })()
       },
       201
     );

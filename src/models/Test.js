@@ -176,16 +176,22 @@ const updateTestConfig = async (id, updateData, adminId) => {
       is_free = COALESCE($7, is_free),
       price = COALESCE($8, price),
       passing_score = COALESCE($9, passing_score),
-      max_attempts = COALESCE($10, max_attempts),
-      updated_by = $11,
-      updated_at = CURRENT_TIMESTAMP
+      max_attempts = COALESCE($10, max_attempts)
     WHERE id = $1
     RETURNING *
   `;
 
   const values = [
-    id, title, description, instructions, testType,
-    durationMinutes, isFree, price, passingScore, maxAttempts, adminId
+    id,
+    title || null,
+    description || null,
+    instructions || null,
+    testType || null,
+    durationMinutes || null,
+    isFree !== undefined ? isFree : null,
+    price !== undefined ? price : null,
+    passingScore || null,
+    maxAttempts || null
   ];
 
   return await getOne(query, values);
