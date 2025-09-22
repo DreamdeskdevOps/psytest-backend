@@ -510,6 +510,199 @@ const bulkUpdateSections = async (req, res) => {
   }
 };
 
+// GET /api/v1/admin/sections/:id/options - Get section answer options
+const getSectionOptions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.admin.id;
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid section ID format',
+        data: null
+      });
+    }
+
+    const result = await AdminSectionService.getSectionOptions(id, adminId);
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Get section options controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// PUT /api/v1/admin/sections/:id/options - Set section answer options
+const setSectionOptions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { options } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid section ID format',
+        data: null
+      });
+    }
+
+    // Validate options array
+    if (!Array.isArray(options) || options.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Options array is required',
+        data: null
+      });
+    }
+
+    // Validate option structure
+    for (const option of options) {
+      if (!option.text || typeof option.text !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Each option must have a text field',
+          data: null
+        });
+      }
+    }
+
+    const result = await AdminSectionService.setSectionOptions(
+      id,
+      options,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Set section options controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// POST /api/v1/admin/sections/:id/options - Add answer option to section
+const addSectionOption = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text, value, isCorrect } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid section ID format',
+        data: null
+      });
+    }
+
+    // Validate option
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Option text is required',
+        data: null
+      });
+    }
+
+    const optionData = {
+      text: text.trim(),
+      value: value || null,
+      isCorrect: Boolean(isCorrect)
+    };
+
+    const result = await AdminSectionService.addSectionOption(
+      id,
+      optionData,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Add section option controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// DELETE /api/v1/admin/sections/:sectionId/options/:optionId - Delete section option
+const deleteSectionOption = async (req, res) => {
+  try {
+    const { sectionId, optionId } = req.params;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUIDs
+    if (!validateUUID(sectionId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid section ID format',
+        data: null
+      });
+    }
+
+    const result = await AdminSectionService.deleteSectionOption(
+      sectionId,
+      optionId,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Delete section option controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
 module.exports = {
   getTestSections,
   createTestSection,
@@ -520,5 +713,9 @@ module.exports = {
   setSectionTiming,
   getSectionTiming,
   reorderTestSections,
-  bulkUpdateSections
+  bulkUpdateSections,
+  getSectionOptions,
+  setSectionOptions,
+  addSectionOption,
+  deleteSectionOption
 };

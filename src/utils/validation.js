@@ -395,31 +395,19 @@ const validateSectionData = (sectionData) => {
     return { isValid: false, message: 'Question count must be between 1 and 100' };
   }
 
-  // Answer pattern validation
-  const allowedPatterns = [
-    'ODD_EVEN', 'YES_NO', 'MULTIPLE_CHOICE', 'TRUE_FALSE',
-    'RATING_SCALE', 'LIKERT_SCALE', 'CUSTOM'
-  ];
-
-  if (!answerPattern || !allowedPatterns.includes(answerPattern)) {
+  // Answer pattern validation - now accepts any non-empty string as template ID
+  // The actual template validation will be done at the service/database level
+  if (!answerPattern || typeof answerPattern !== 'string' || answerPattern.trim().length === 0) {
     return {
       isValid: false,
-      message: `Answer pattern must be one of: ${allowedPatterns.join(', ')}`
+      message: 'Answer pattern (template ID) is required'
     };
   }
 
-  // Answer options validation (for multiple choice)
-  if (answerPattern === 'MULTIPLE_CHOICE') {
-    if (!answerOptions || answerOptions < 2 || answerOptions > 6) {
-      return { isValid: false, message: 'Multiple choice must have between 2 and 6 options' };
-    }
-  }
+  // Answer options validation is now handled by the template configuration
+  // No need for hardcoded validation since templates define their own requirements
 
-  if (answerPattern === 'LIKERT_SCALE') {
-    if (!answerOptions || answerOptions < 3 || answerOptions > 10) {
-      return { isValid: false, message: 'Likert scale must have between 3 and 10 points' };
-    }
-  }
+  // Template-specific validations are handled by the template system
 
   // Max score validation
   if (maxScore && (maxScore < 1 || maxScore > 1000)) {
@@ -534,32 +522,16 @@ const validateSectionUpdateData = (updateData) => {
     }
   }
 
-  // Answer pattern validation (only if provided)
+  // Answer pattern validation (only if provided) - now accepts any non-empty string as template ID
   if (answerPattern !== undefined) {
-    const allowedPatterns = [
-      'ODD_EVEN', 'YES_NO', 'MULTIPLE_CHOICE', 'TRUE_FALSE',
-      'RATING_SCALE', 'LIKERT_SCALE', 'CUSTOM'
-    ];
-
-    if (!answerPattern || !allowedPatterns.includes(answerPattern)) {
+    if (!answerPattern || typeof answerPattern !== 'string' || answerPattern.trim().length === 0) {
       return {
         isValid: false,
-        message: `Answer pattern must be one of: ${allowedPatterns.join(', ')}`
+        message: 'Answer pattern (template ID) must be a valid non-empty string'
       };
     }
 
-    // Answer options validation (for multiple choice, only if answerPattern is provided)
-    if (answerPattern === 'MULTIPLE_CHOICE') {
-      if (!answerOptions || answerOptions < 2 || answerOptions > 6) {
-        return { isValid: false, message: 'Multiple choice must have between 2 and 6 options' };
-      }
-    }
-
-    if (answerPattern === 'LIKERT_SCALE') {
-      if (!answerOptions || answerOptions < 3 || answerOptions > 10) {
-        return { isValid: false, message: 'Likert scale must have between 3 and 10 points' };
-      }
-    }
+    // Template-specific validations are handled by the template system
   }
 
   // Max score validation (only if provided)

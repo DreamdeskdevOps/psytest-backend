@@ -162,6 +162,7 @@ const updateSection = async (sectionId, updateData, adminId) => {
   `;
 
   const values = [
+    sectionId,                  // ? in WHERE id = ?
     sectionName || null,        // ? in section_name = COALESCE(?, ...)
     questionCount || null,      // ? in question_count = COALESCE(?, ...)
     scoringLogic || null,       // ? in scoring_logic = COALESCE(?, ...)
@@ -170,8 +171,7 @@ const updateSection = async (sectionId, updateData, adminId) => {
     maxScore || null,           // ? in max_score = COALESCE(?, ...)
     instructions || null,       // ? in instructions = COALESCE(?, ...)
     customScoringConfig ? JSON.stringify(customScoringConfig) : null, // ? in custom_scoring_config = COALESCE(?, ...)
-    adminId,                    // ? in updated_by = ?
-    sectionId                   // ? in WHERE id = ?
+    adminId                     // ? in updated_by = ?
   ];
 
   return await getOne(query, values);

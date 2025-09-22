@@ -12,7 +12,6 @@ const adminTestRoutes = require('./routes/admin/tests');
 const adminSectionRoutes = require('./routes/admin/sections');
 const adminQuestionRoutes = require('./routes/admin/questions');
 const adminAnswersRoutes = require('./routes/admin/answerOptions');
-const adminOptionTypesRoutes = require('./routes/admin/optionTypes');
 const adminConfigurationRoutes = require('./routes/admin/adminConfigurationRoutes');
 // const testRoutes = require('./routes/tests');
 // const userRoutes = require('./routes/users');
@@ -35,7 +34,6 @@ app.use('/api/' + process.env.API_VERSION + '/admin/tests', adminTestRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/sections', adminSectionRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/questions', adminQuestionRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/answers', adminAnswersRoutes);
-app.use('/api/' + process.env.API_VERSION + '/admin/option-types', adminOptionTypesRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/configuration', adminConfigurationRoutes);
 
 // app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
@@ -43,8 +41,8 @@ app.use('/api/' + process.env.API_VERSION + '/admin/configuration', adminConfigu
 
 // Basic health check endpoint
 app.get('/health', (req, res) => {
-    res.json({
-        status: 'OK',
+    res.json({ 
+        status: 'OK', 
         message: 'Server is running',
         timestamp: new Date().toISOString()
     });

@@ -469,6 +469,390 @@ const bulkUpdateSections = async (updates, adminId, ipAddress, userAgent) => {
   }
 };
 
+// Get section answer options
+const getSectionOptions = async (sectionId, adminId) => {
+  try {
+    const section = await SectionModel.getSectionById(sectionId);
+    if (!section) {
+      return generateResponse(false, 'Section not found', null, 404);
+    }
+
+    let options = [];
+
+    // First check if we have section_options stored in custom_scoring_config
+    if (section.custom_scoring_config) {
+      try {
+        const customConfig = typeof section.custom_scoring_config === 'string'
+          ? JSON.parse(section.custom_scoring_config)
+          : section.custom_scoring_config;
+
+        if (customConfig.section_options && Array.isArray(customConfig.section_options)) {
+          options = customConfig.section_options;
+          console.log('📋 Found section options in custom_scoring_config:', options);
+        }
+      } catch (e) {
+        console.log('Error parsing custom_scoring_config:', e);
+      }
+    }
+
+    // If no section options found, try to get from answer template
+    if (options.length === 0) {
+      const { getOne } = require('../config/database');
+      const templateQuery = `
+        SELECT pattern_name, display_name, configuration
+        FROM answer_patterns
+        WHERE pattern_name = $1 OR id = $1
+      `;
+
+      try {
+        const template = await getOne(templateQuery, [section.answer_pattern]);
+        if (template && template.configuration) {
+          const config = typeof template.configuration === 'string'
+            ? JSON.parse(template.configuration)
+            : template.configuration;
+          options = config.options || [];
+          console.log('📋 Found options from answer template:', options);
+        }
+      } catch (error) {
+        console.log('Template not found, no options available');
+      }
+    }
+
+    const responseData = {
+      sectionId: sectionId,
+      sectionName: section.section_name,
+      answerPattern: section.answer_pattern,
+      options: options,
+      totalOptions: options.length
+    };
+
+    return generateResponse(true, 'Section options retrieved successfully', responseData, 200);
+
+  } catch (error) {
+    console.error('Get section options service error:', error);
+    return generateResponse(false, 'Failed to retrieve section options', null, 500);
+  }
+};
+
+// Set section answer options
+const setSectionOptions = async (sectionId, options, adminId, ipAddress, userAgent) => {
+  try {
+    const existingSection = await SectionModel.getSectionById(sectionId);
+    if (!existingSection) {
+      return generateResponse(false, 'Section not found', null, 404);
+    }
+
+    // Validate options
+    if (!Array.isArray(options) || options.length === 0) {
+      return generateResponse(false, 'Options array is required', null, 400);
+    }
+
+    if (options.length > 10) {
+      return generateResponse(false, 'Maximum 10 options allowed per section', null, 400);
+    }
+
+    // Validate each option
+    for (let i = 0; i < options.length; i++) {
+      const option = options[i];
+      if (!option.text || typeof option.text !== 'string' || option.text.trim().length === 0) {
+        return generateResponse(false, `Option ${i + 1}: Text is required`, null, 400);
+      }
+      if (option.text.trim().length > 200) {
+        return generateResponse(false, `Option ${i + 1}: Text cannot exceed 200 characters`, null, 400);
+      }
+    }
+
+    // Format options with IDs
+    const formattedOptions = options.map((option, index) => ({
+      id: option.id || `opt_${Date.now()}_${index}`,
+      text: option.text.trim(),
+      value: option.value !== undefined ? option.value : index + 1,
+      isCorrect: Boolean(option.isCorrect)
+    }));
+
+    // Get existing custom_scoring_config and add section_options to it
+    let customConfig = {};
+    if (existingSection.custom_scoring_config) {
+      try {
+        customConfig = typeof existingSection.custom_scoring_config === 'string'
+          ? JSON.parse(existingSection.custom_scoring_config)
+          : existingSection.custom_scoring_config;
+      } catch (e) {
+        customConfig = {};
+      }
+    }
+
+    // Add section options to the custom config
+    customConfig.section_options = formattedOptions;
+
+    const updateData = {
+      customScoringConfig: customConfig,
+      answerOptions: formattedOptions.length // Store count in the integer field
+    };
+
+    const updatedSection = await SectionModel.updateSection(sectionId, updateData, adminId);
+
+    if (!updatedSection) {
+      return generateResponse(false, 'Failed to update section with new options', null, 500);
+    }
+
+    // Log admin activity (non-blocking)
+    try {
+      await logAdminActivity(adminId, 'SECTION_OPTIONS_SET', {
+        sectionId: sectionId,
+        testId: existingSection.test_id,
+        optionsCount: formattedOptions.length,
+        options: formattedOptions.map(opt => opt.text),
+        ipAddress,
+        userAgent
+      });
+    } catch (logError) {
+      console.error('Failed to log admin activity (non-blocking):', logError);
+      // Don't fail the main operation if logging fails
+    }
+
+    const responseData = {
+      sectionId: sectionId,
+      sectionName: updatedSection.section_name,
+      options: formattedOptions,
+      totalOptions: formattedOptions.length,
+      message: 'All questions in this section will now use these answer options'
+    };
+
+    return generateResponse(true, 'Section answer options updated successfully', responseData, 200);
+
+  } catch (error) {
+    console.error('Set section options service error:', error);
+    return generateResponse(false, 'Failed to update section options', null, 500);
+  }
+};
+
+// Add single answer option to section
+const addSectionOption = async (sectionId, optionData, adminId, ipAddress, userAgent) => {
+  try {
+    console.log('🔍 addSectionOption called with:', { sectionId, optionData, adminId });
+
+    // Validate inputs
+    if (!sectionId) {
+      console.error('❌ Missing sectionId');
+      return generateResponse(false, 'Section ID is required', null, 400);
+    }
+
+    if (!optionData || !optionData.text) {
+      console.error('❌ Missing option data or text');
+      return generateResponse(false, 'Option text is required', null, 400);
+    }
+
+    if (!adminId) {
+      console.error('❌ Missing adminId');
+      return generateResponse(false, 'Admin ID is required', null, 400);
+    }
+
+    const existingSection = await SectionModel.getSectionById(sectionId);
+    if (!existingSection) {
+      console.error('❌ Section not found:', sectionId);
+      return generateResponse(false, 'Section not found', null, 404);
+    }
+
+    console.log('✅ Existing section found:', existingSection.section_name);
+
+    // Get current options
+    let currentOptions = [];
+    if (existingSection.answer_options) {
+      try {
+        const parsed = typeof existingSection.answer_options === 'string'
+          ? JSON.parse(existingSection.answer_options)
+          : existingSection.answer_options;
+        currentOptions = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        currentOptions = [];
+      }
+    }
+
+    console.log('📝 Current options parsed:', currentOptions);
+
+    // Check limit
+    if (currentOptions.length >= 10) {
+      console.error('❌ Too many options:', currentOptions.length);
+      return generateResponse(false, 'Maximum 10 options allowed per section', null, 400);
+    }
+
+    // Add new option
+    const newOption = {
+      id: `opt_${Date.now()}_${currentOptions.length}`,
+      text: optionData.text.trim(),
+      value: optionData.value !== undefined ? optionData.value : currentOptions.length + 1,
+      isCorrect: Boolean(optionData.isCorrect)
+    };
+
+    console.log('🆕 New option created:', newOption);
+
+    currentOptions.push(newOption);
+
+    console.log('📋 All options after adding:', currentOptions);
+
+    // Update section - store options in custom_scoring_config for now since answer_options is INTEGER
+    const optionsJsonString = JSON.stringify(currentOptions);
+    console.log('📄 JSON string to store:', optionsJsonString);
+
+    // Get existing custom_scoring_config and add section_options to it
+    let customConfig = {};
+    if (existingSection.custom_scoring_config) {
+      try {
+        customConfig = typeof existingSection.custom_scoring_config === 'string'
+          ? JSON.parse(existingSection.custom_scoring_config)
+          : existingSection.custom_scoring_config;
+      } catch (e) {
+        customConfig = {};
+      }
+    }
+
+    // Add section options to the custom config
+    customConfig.section_options = currentOptions;
+
+    const updateData = {
+      customScoringConfig: customConfig,
+      answerOptions: currentOptions.length // Store count in the integer field
+    };
+
+    console.log('💾 Update data prepared:', updateData);
+
+    let updatedSection;
+    try {
+      updatedSection = await SectionModel.updateSection(sectionId, updateData, adminId);
+      console.log('✅ Section updated result:', updatedSection);
+
+      if (!updatedSection) {
+        console.error('❌ UpdateSection returned null/undefined');
+        return generateResponse(false, 'Database update failed - no result returned', null, 500);
+      }
+    } catch (dbError) {
+      console.error('❌ Database update error:', dbError);
+      return generateResponse(false, 'Database update failed: ' + dbError.message, null, 500);
+    }
+
+    // Log admin activity (non-blocking)
+    try {
+      await logAdminActivity(adminId, 'SECTION_OPTION_ADD', {
+        sectionId: sectionId,
+        testId: existingSection.test_id,
+        newOption: newOption,
+        totalOptions: currentOptions.length,
+        ipAddress,
+        userAgent
+      });
+    } catch (logError) {
+      console.error('Failed to log admin activity (non-blocking):', logError);
+      // Don't fail the main operation if logging fails
+    }
+
+    const responseData = {
+      sectionId: sectionId,
+      addedOption: newOption,
+      totalOptions: currentOptions.length,
+      allOptions: currentOptions
+    };
+
+    return generateResponse(true, 'Answer option added to section successfully', responseData, 201);
+
+  } catch (error) {
+    console.error('❌ Add section option service error:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error message:', error.message);
+    return generateResponse(false, 'Failed to add section option', null, 500);
+  }
+};
+
+// Delete answer option from section
+const deleteSectionOption = async (sectionId, optionId, adminId, ipAddress, userAgent) => {
+  try {
+    const existingSection = await SectionModel.getSectionById(sectionId);
+    if (!existingSection) {
+      return generateResponse(false, 'Section not found', null, 404);
+    }
+
+    // Get current options from custom_scoring_config
+    let currentOptions = [];
+    if (existingSection.custom_scoring_config) {
+      try {
+        const customConfig = typeof existingSection.custom_scoring_config === 'string'
+          ? JSON.parse(existingSection.custom_scoring_config)
+          : existingSection.custom_scoring_config;
+        currentOptions = Array.isArray(customConfig.section_options) ? customConfig.section_options : [];
+      } catch (e) {
+        currentOptions = [];
+      }
+    }
+
+    // Find and remove option
+    const optionIndex = currentOptions.findIndex(opt => opt.id === optionId);
+    if (optionIndex === -1) {
+      return generateResponse(false, 'Option not found', null, 404);
+    }
+
+    // Check minimum options
+    if (currentOptions.length <= 2) {
+      return generateResponse(false, 'Section must have at least 2 answer options', null, 400);
+    }
+
+    const deletedOption = currentOptions.splice(optionIndex, 1)[0];
+
+    // Get existing custom_scoring_config and update section_options
+    let customConfig = {};
+    if (existingSection.custom_scoring_config) {
+      try {
+        customConfig = typeof existingSection.custom_scoring_config === 'string'
+          ? JSON.parse(existingSection.custom_scoring_config)
+          : existingSection.custom_scoring_config;
+      } catch (e) {
+        customConfig = {};
+      }
+    }
+
+    // Update section options in the custom config
+    customConfig.section_options = currentOptions;
+
+    const updateData = {
+      customScoringConfig: customConfig,
+      answerOptions: currentOptions.length // Store count in the integer field
+    };
+
+    const updatedSection = await SectionModel.updateSection(sectionId, updateData, adminId);
+
+    if (!updatedSection) {
+      return generateResponse(false, 'Failed to update section after deleting option', null, 500);
+    }
+
+    // Log admin activity (non-blocking)
+    try {
+      await logAdminActivity(adminId, 'SECTION_OPTION_DELETE', {
+        sectionId: sectionId,
+        testId: existingSection.test_id,
+        deletedOption: deletedOption,
+        remainingOptions: currentOptions.length,
+        ipAddress,
+        userAgent
+      });
+    } catch (logError) {
+      console.error('Failed to log admin activity (non-blocking):', logError);
+      // Don't fail the main operation if logging fails
+    }
+
+    const responseData = {
+      sectionId: sectionId,
+      deletedOption: deletedOption,
+      remainingOptions: currentOptions.length,
+      allOptions: currentOptions
+    };
+
+    return generateResponse(true, 'Answer option removed from section successfully', responseData, 200);
+
+  } catch (error) {
+    console.error('Delete section option service error:', error);
+    return generateResponse(false, 'Failed to delete section option', null, 500);
+  }
+};
+
 module.exports = {
   getTestSections,
   createTestSection,
@@ -479,5 +863,9 @@ module.exports = {
   setSectionTiming,
   getSectionTiming,
   reorderTestSections,
-  bulkUpdateSections
+  bulkUpdateSections,
+  getSectionOptions,
+  setSectionOptions,
+  addSectionOption,
+  deleteSectionOption
 };
