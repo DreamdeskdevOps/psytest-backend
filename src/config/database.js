@@ -31,70 +31,70 @@ const connectDB = async () => {
 };
 
 // Database utility functions
-const getOne = async (query, params = []) => {
-    const [results] = await sequelize.query(query, {
+const getOne = async (query, params = [], transaction = null) => {
+    const options = {
         bind: params,
         type: Sequelize.QueryTypes.SELECT,
         raw: true
-    });
+    };
+    if (transaction) options.transaction = transaction;
+
+    const [results] = await sequelize.query(query, options);
     return results;
 };
 
-const getMany = async (query, params = []) => {
-    const results = await sequelize.query(query, {
+const getMany = async (query, params = [], transaction = null) => {
+    const options = {
         bind: params,
         type: Sequelize.QueryTypes.SELECT
-    });
+    };
+    if (transaction) options.transaction = transaction;
+
+    const results = await sequelize.query(query, options);
     return results;
 };
 
-const insertOne = async (query, params = []) => {
-    // Check if query has RETURNING clause - if so, use SELECT type to get the returned data
+const insertOne = async (query, params = [], transaction = null) => {
+    const options = { bind: params };
+    if (transaction) options.transaction = transaction;
+
     if (query.toUpperCase().includes('RETURNING')) {
-        const [results] = await sequelize.query(query, {
-            bind: params,
-            type: Sequelize.QueryTypes.SELECT
-        });
+        options.type = Sequelize.QueryTypes.SELECT;
+        const [results] = await sequelize.query(query, options);
         return results;
     } else {
-        const [results] = await sequelize.query(query, {
-            bind: params,
-            type: Sequelize.QueryTypes.INSERT
-        });
+        options.type = Sequelize.QueryTypes.INSERT;
+        const [results] = await sequelize.query(query, options);
         return results;
     }
 };
 
-const updateOne = async (query, params = []) => {
-    // Check if query has RETURNING clause - if so, use SELECT type to get the returned data
+const updateOne = async (query, params = [], transaction = null) => {
+    const options = { bind: params };
+    if (transaction) options.transaction = transaction;
+
     if (query.toUpperCase().includes('RETURNING')) {
-        const [results] = await sequelize.query(query, {
-            bind: params,
-            type: Sequelize.QueryTypes.SELECT
-        });
+        options.type = Sequelize.QueryTypes.SELECT;
+        const [results] = await sequelize.query(query, options);
         return results;
     } else {
-        const [results] = await sequelize.query(query, {
-            bind: params,
-            type: Sequelize.QueryTypes.UPDATE
-        });
+        options.type = Sequelize.QueryTypes.UPDATE;
+        const [results] = await sequelize.query(query, options);
         return results;
     }
 };
 
-const deleteOne = async (query, params = []) => {
-    // Check if query has RETURNING clause - if so, use SELECT type to get the returned data
+const deleteOne = async (query, params = [], transaction = null) => {
+    const options = { bind: params };
+    if (transaction) options.transaction = transaction;
+
     if (query.toUpperCase().includes('RETURNING')) {
-        const [results] = await sequelize.query(query, {
-            bind: params,
-            type: Sequelize.QueryTypes.SELECT
-        });
+        options.type = Sequelize.QueryTypes.SELECT;
+        const [results] = await sequelize.query(query, options);
         return results;
     } else {
-        const [results] = await sequelize.query(query, {
-            bind: params,
-            type: Sequelize.QueryTypes.DELETE
-        });
+        options.type = Sequelize.QueryTypes.DELETE;
+        const [results] = await sequelize.query(query, options);
         return results;
     }
 };

@@ -93,7 +93,7 @@ const getQuestionById = async (questionId) => {
 };
 
 // Create new question in section
-const createQuestion = async (sectionId, questionData, adminId) => {
+const createQuestion = async (sectionId, questionData, adminId, transaction = null) => {
   const {
     questionText, questionOrder, questionNumber, options,
     correctAnswer, marks, difficultyLevel, explanation,
@@ -107,7 +107,7 @@ const createQuestion = async (sectionId, questionData, adminId) => {
       SELECT COALESCE(MAX(order_index), 0) + 1 as next_order 
       FROM ${TABLE_NAME} WHERE section_id = $1 AND is_active = true
     `;
-    const orderResult = await getOne(orderQuery, [sectionId]);
+    const orderResult = await getOne(orderQuery, [sectionId], transaction);
     finalQuestionOrder = orderResult.next_order;
   }
 
@@ -142,7 +142,7 @@ const createQuestion = async (sectionId, questionData, adminId) => {
     true
   ];
 
-  return await insertOne(query, values);
+  return await insertOne(query, values, transaction);
 };
 
 // Update question basic information

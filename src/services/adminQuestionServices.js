@@ -2,6 +2,7 @@ const QuestionModel = require('../models/Questions');
 const SectionModel = require('../models/Section');
 const { generateResponse } = require('../utils/helpers');
 const { validateQuestionData } = require('../utils/validation');
+const xlsx = require('xlsx');
 
 // Helper function to log admin activity
 const logAdminActivity = async (adminId, actionType, actionData) => {
@@ -641,9 +642,97 @@ const toRomanNumeral = (num) => {
   return result;
 };
 
+const bulkImportQuestions = async (sectionId, fileBuffer, adminId, ipAddress, userAgent) => {
+  const { sequelize } = require('../config/database');
+  const t = await sequelize.transaction();
+
+  try {
+    // 1. Verify section exists
+    const section = await SectionModel.getSectionById(sectionId);
+    if (!section) {
+      await t.rollback();
+      return generateResponse(false, 'Section not found', null, 404);
+    }
+
+    // 2. Parse the Excel file
+    const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const questionsData = xlsx.utils.sheet_to_json(worksheet);
+
+    if (!questionsData || questionsData.length === 0) {
+      await t.rollback();
+      return generateResponse(false, 'Excel file is empty or could not be read.', null, 400);
+    }
+
+    // 3. Validate data and check capacity
+    const requiredColumns = ['question_text', 'order_index'];
+    for (const col of requiredColumns) {
+      if (!questionsData[0].hasOwnProperty(col)) {
+        await t.rollback();
+        return generateResponse(false, `Missing required column in Excel file: ${col}`, null, 400);
+      }
+    }
+
+    const existingQuestions = await QuestionModel.getQuestionsBySection(sectionId);
+    if (existingQuestions.length + questionsData.length > section.question_count) {
+      await t.rollback();
+      return generateResponse(
+        false,
+        `Importing ${questionsData.length} questions would exceed the section limit of ${section.question_count}.`,
+        null,
+        400
+      );
+    }
+
+    // 4. Create Questions in the Transaction
+    const createdQuestions = [];
+    for (const question of questionsData) {
+      const questionData = {
+        questionText: question.question_text,
+        questionOrder: question.order_index,
+        questionType: question.question_type || 'multiple_choice',
+      };
+
+      if (!questionData.questionText || String(questionData.questionText).trim() === '') {
+        throw new Error(`Row with order_index ${question.order_index} has empty question_text.`);
+      }
+
+      const newQuestion = await QuestionModel.createQuestion(sectionId, questionData, adminId, t);
+      createdQuestions.push(newQuestion);
+    }
+
+    // 5. Commit the transaction
+    await t.commit();
+
+    // 6. Log admin activity
+    await logAdminActivity(adminId, 'QUESTION_BULK_IMPORT', {
+      sectionId: sectionId,
+      testId: section.test_id,
+      importedCount: createdQuestions.length,
+      ipAddress,
+      userAgent
+    });
+
+    // 7. Return response
+    return generateResponse(
+      true,
+      `${createdQuestions.length} questions imported successfully.`,
+      { importedCount: createdQuestions.length },
+      201
+    );
+
+  } catch (error) {
+    await t.rollback();
+    console.error('Bulk import questions service error:', error);
+    return generateResponse(false, error.message || 'Failed to import questions.', null, 500);
+  }
+};
+
 module.exports = {
   getSectionQuestions,
   createSectionQuestion,
+  bulkImportQuestions,
   getQuestionDetails,
   updateQuestionInfo,
   deleteQuestion,

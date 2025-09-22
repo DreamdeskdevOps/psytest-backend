@@ -1,5 +1,6 @@
 const AdminQuestionService = require('../../services/adminQuestionServices');
 const { validateUUID } = require('../../utils/validation');
+const xlsx = require('xlsx');
 
 // GET /api/v1/admin/sections/:sectionId/questions - Get all questions in section
 const getSectionQuestions = async (req, res) => {
@@ -664,9 +665,66 @@ const setSectionNumbering = async (req, res) => {
   }
 };
 
+const bulkImportQuestions = async (req, res) => {
+  try {
+    const { sectionId } = req.params;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded.',
+        data: null
+      });
+    }
+
+    // Validate UUID
+    if (!validateUUID(sectionId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid section ID format',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.bulkImportQuestions(
+      sectionId,
+      req.file.buffer,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Bulk import questions controller error:', error);
+    // Check if the error is a known validation error from the service
+    if (error.isJoi || error.isCustom) {
+        return res.status(400).json({
+            success: false,
+            message: error.message,
+            data: null
+        });
+    }
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error during bulk import',
+      data: null
+    });
+  }
+};
+
 module.exports = {
   getSectionQuestions,
   createSectionQuestion,
+  bulkImportQuestions,
   getQuestionDetails,
   updateQuestion,
   deleteQuestion,

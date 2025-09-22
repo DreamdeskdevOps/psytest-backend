@@ -2,7 +2,9 @@ const express = require('express');
 const adminQuestionController = require('../../controllers/admin/adminQuestionController');
 const { authenticateAdmin } = require('../../middleware/auth');
 const { rateLimitAPI } = require('../../middleware/rateLimiter');
+const multer = require('multer');
 
+const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
 
 // Apply admin authentication to all routes (temporarily disabled for testing)
@@ -26,6 +28,13 @@ router.get('/sections/:sectionId/questions',
 // POST /api/v1/admin/sections/:sectionId/questions - Add question to section
 router.post('/sections/:sectionId/questions', 
   adminQuestionController.createSectionQuestion
+);
+
+// POST /api/v1/admin/questions/sections/:sectionId/questions/bulk-import - Bulk import questions from Excel
+router.post(
+  '/sections/:sectionId/questions/bulk-import',
+  upload.single('file'), // 'file' should be the name of the form field
+  adminQuestionController.bulkImportQuestions
 );
 
 // GET /api/v1/admin/questions/:id - Get question details
