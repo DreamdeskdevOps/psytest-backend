@@ -1,30 +1,47 @@
 const { getOne, insertOne, updateOne, deleteOne, getMany } = require('../config/database');
+const QuestionImages = require('./QuestionImages');
 
 const TABLE_NAME = 'questions';
+const VIEW_NAME = 'questions_with_images';
 
 // Map question types to database constraints
 const mapQuestionType = (type) => {
   const typeMap = {
-    'STANDARD': 'text',
-    'TEXT': 'text',
-    'IMAGE': 'image',
-    'MIXED': 'mixed',
-    'standard': 'text',
-    'text': 'text',
-    'image': 'image',
-    'mixed': 'mixed'
+    'STANDARD': 'multiple_choice',
+    'TEXT': 'multiple_choice',
+    'IMAGE': 'image_choice',
+    'MIXED': 'multiple_choice',
+    'MULTIPLE_CHOICE': 'multiple_choice',
+    'SINGLE_CHOICE': 'single_select',
+    'TRUE_FALSE': 'true_false',
+    'SHORT_ANSWER': 'text_input',
+    'ESSAY': 'text_input',
+    'FILL_BLANK': 'text_input',
+    'standard': 'multiple_choice',
+    'text': 'multiple_choice',
+    'image': 'image_choice',
+    'mixed': 'multiple_choice',
+    'multiple_choice': 'multiple_choice',
+    'true_false': 'true_false',
+    'single_select': 'single_select',
+    'multi_select': 'multi_select',
+    'likert_scale': 'likert_scale',
+    'rating_scale': 'rating_scale',
+    'text_input': 'text_input',
+    'image_choice': 'image_choice',
+    'options_only': 'options_only'
   };
-  return typeMap[type] || 'text';
+  return typeMap[type] || 'multiple_choice';
 };
 
-// Get all questions in a section with complete details
+// Get all questions in a section with complete details including images
 const getQuestionsBySection = async (sectionId) => {
   const query = `
     SELECT
       q.id, q.section_id, q.question_text, q.order_index,
       q.custom_number, q.correct_answer,
       q.difficulty_level, q.question_image, q.answer_explanation,
-      q.question_type, q.is_active,
+      q.question_type, q.question_content_type, q.question_flag, q.is_active,
       q.created_at, q.updated_at,
       
       -- Section information for context
@@ -56,18 +73,59 @@ const getQuestionsBySection = async (sectionId) => {
     WHERE q.section_id = $1 AND q.is_active = true
     ORDER BY q.order_index ASC, q.created_at ASC
   `;
-  
-  return await getMany(query, [sectionId]);
+
+  let questions;
+  try {
+    questions = await getMany(query, [sectionId]);
+    console.log('🚀 Questions retrieved with flag support:', questions.length);
+    if (questions.length > 0) {
+      console.log('🏷️ First question flag data:', {
+        id: questions[0].id,
+        question_flag: questions[0].question_flag,
+        question_text: questions[0].question_text?.substring(0, 30) + '...'
+      });
+    }
+  } catch (error) {
+    if (error.message && error.message.includes('question_flag') && error.message.includes('does not exist')) {
+      console.log('🏷️ question_flag column does not exist, falling back...');
+      // Fallback query without question_flag
+      const fallbackQuery = query.replace('q.question_flag,', '');
+      questions = await getMany(fallbackQuery, [sectionId]);
+      // Add null flag to each question for consistency
+      questions = questions.map(q => ({ ...q, question_flag: null }));
+      console.log('🏷️ Using fallback query, questions:', questions.length);
+    } else {
+      throw error;
+    }
+  }
+
+  if (questions && questions.length > 0) {
+    // Get images for all questions
+    const questionIds = questions.map(q => q.id);
+    const questionsWithImages = await QuestionImages.getQuestionsWithImages(questionIds);
+
+    // Merge images data
+    const imagesByQuestionId = {};
+    questionsWithImages.forEach(qwi => {
+      imagesByQuestionId[qwi.questionId] = qwi.images;
+    });
+
+    questions.forEach(question => {
+      question.images = imagesByQuestionId[question.id] || [];
+    });
+  }
+
+  return questions;
 };
 
-// Get single question with complete details
+// Get single question with complete details including images
 const getQuestionById = async (questionId) => {
   const query = `
     SELECT
       q.id, q.section_id, q.question_text, q.order_index,
       q.custom_number, q.correct_answer,
       q.difficulty_level, q.question_image, q.answer_explanation,
-      q.question_type, q.is_active,
+      q.question_type, q.question_content_type, q.question_flag, q.is_active,
       q.created_at, q.updated_at,
       
       -- Section and test context
@@ -88,16 +146,40 @@ const getQuestionById = async (questionId) => {
     JOIN tests t ON s.test_id = t.id
     WHERE q.id = $1 AND q.is_active = true
   `;
-  
-  return await getOne(query, [questionId]);
+
+  let questionData;
+  try {
+    questionData = await getOne(query, [questionId]);
+  } catch (error) {
+    if (error.message && error.message.includes('question_flag') && error.message.includes('does not exist')) {
+      // Fallback query without question_flag
+      const fallbackQuery = query.replace('q.question_flag,', '');
+      questionData = await getOne(fallbackQuery, [questionId]);
+      // Add null flag for consistency
+      if (questionData) {
+        questionData.question_flag = null;
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  if (questionData) {
+    // Get associated images
+    const images = await QuestionImages.getQuestionImages(questionId);
+    questionData.images = images;
+  }
+
+  return questionData;
 };
 
-// Create new question in section
+// Create new question in section with enhanced support
 const createQuestion = async (sectionId, questionData, adminId, transaction = null) => {
   const {
     questionText, questionOrder, questionNumber, options,
     correctAnswer, marks, difficultyLevel, explanation,
-    questionType, isRequired = true
+    questionType, isRequired = true, questionContentType = 'text_only',
+    questionFlag = null, images = []
   } = questionData;
 
   // Get next question order if not provided
@@ -117,39 +199,138 @@ const createQuestion = async (sectionId, questionData, adminId, transaction = nu
     finalQuestionNumber = finalQuestionOrder;
   }
 
-  const query = `
+  // Ensure all parameters are properly defined first
+  const finalQuestionContentType = questionContentType || 'text_only';
+  const finalQuestionType = mapQuestionType(questionType || 'multiple_choice');
+  const finalDifficultyLevel = (difficultyLevel || 'medium').toLowerCase();
+  const finalCustomNumber = String(finalQuestionNumber || finalQuestionOrder);
+
+  // Handle options_only content type - allow empty question text
+  const finalQuestionText = finalQuestionContentType === 'options_only'
+    ? (questionText || '')
+    : questionText;
+
+  console.log('Creating question with parameters:', {
+    sectionId,
+    questionText: finalQuestionText?.substring(0, 50) + '...',
+    finalQuestionOrder,
+    finalCustomNumber,
+    correctAnswer,
+    finalDifficultyLevel,
+    explanation: explanation?.substring(0, 30) + '...',
+    finalQuestionType,
+    finalQuestionContentType,
+    questionFlag: questionFlag || null,
+    isActive: true,
+    isOptionsOnly: finalQuestionContentType === 'options_only'
+  });
+
+  // Try to use query with question_flag, fall back if column doesn't exist
+  let query = `
     INSERT INTO ${TABLE_NAME} (
       section_id, question_text, order_index, custom_number,
       correct_answer, difficulty_level, answer_explanation,
-      question_type, is_active,
+      question_type, question_content_type, question_flag, is_active,
       created_at, updated_at
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9,
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     )
     RETURNING *
   `;
 
-  const values = [
-    sectionId,
-    questionText,
-    finalQuestionOrder,
-    String(finalQuestionNumber || finalQuestionOrder),
-    correctAnswer || null,
-    (difficultyLevel || 'medium').toLowerCase(),
-    explanation || null,
-    mapQuestionType(questionType || 'text'),
-    true
+  let values = [
+    sectionId,                    // $1
+    finalQuestionText,           // $2 - Can be empty for options_only
+    finalQuestionOrder,          // $3
+    finalCustomNumber,           // $4
+    correctAnswer || null,       // $5
+    finalDifficultyLevel,        // $6
+    explanation || null,         // $7
+    finalQuestionType,           // $8
+    finalQuestionContentType,    // $9
+    questionFlag || null,        // $10 - Optional flag for categorization
+    true                         // $11
   ];
 
-  return await insertOne(query, values, transaction);
+  // Validate all parameters are defined
+  values.forEach((value, index) => {
+    if (value === undefined) {
+      console.error(`Parameter $${index + 1} is undefined:`, {
+        parameterNumber: index + 1,
+        value,
+        allValues: values
+      });
+      throw new Error(`Parameter $${index + 1} is undefined. Cannot execute SQL query.`);
+    }
+  });
+
+  let createdQuestion;
+  try {
+    // Try with question_flag column first
+    createdQuestion = await insertOne(query, values, transaction);
+  } catch (error) {
+    if (error.message && error.message.includes('question_flag') && error.message.includes('does not exist')) {
+      console.log('question_flag column does not exist, falling back to query without it');
+
+      // Fallback query without question_flag for backward compatibility
+      const fallbackQuery = `
+        INSERT INTO ${TABLE_NAME} (
+          section_id, question_text, order_index, custom_number,
+          correct_answer, difficulty_level, answer_explanation,
+          question_type, question_content_type, is_active,
+          created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        RETURNING *
+      `;
+
+      const fallbackValues = [
+        sectionId,                    // $1
+        finalQuestionText,           // $2 - Can be empty for options_only
+        finalQuestionOrder,          // $3
+        finalCustomNumber,           // $4
+        correctAnswer || null,       // $5
+        finalDifficultyLevel,        // $6
+        explanation || null,         // $7
+        finalQuestionType,           // $8
+        finalQuestionContentType,    // $9
+        true                         // $10
+      ];
+
+      createdQuestion = await insertOne(fallbackQuery, fallbackValues, transaction);
+    } else {
+      throw error; // Re-throw if it's not a column missing error
+    }
+  }
+
+  // If images are provided, create question images
+  if (images && images.length > 0 && createdQuestion) {
+    try {
+      const imagePromises = images.map((imageData, index) =>
+        QuestionImages.createQuestionImage(createdQuestion.id, {
+          ...imageData,
+          displayOrder: imageData.displayOrder || (index + 1)
+        }, adminId)
+      );
+      await Promise.all(imagePromises);
+    } catch (imageError) {
+      console.error('Error creating question images:', imageError);
+      // Continue without failing the question creation
+    }
+  }
+
+  return createdQuestion;
 };
 
-// Update question basic information
+// Update question basic information with enhanced support
 const updateQuestion = async (questionId, updateData, adminId) => {
   const {
     questionText, questionNumber, options, correctAnswer,
-    marks, difficultyLevel, explanation, questionType, isRequired
+    marks, difficultyLevel, explanation, questionType, isRequired,
+    questionContentType, images
   } = updateData;
 
   const query = `
@@ -161,6 +342,7 @@ const updateQuestion = async (questionId, updateData, adminId) => {
       difficulty_level = COALESCE($5, difficulty_level),
       answer_explanation = COALESCE($6, answer_explanation),
       question_type = COALESCE($7, question_type),
+      question_content_type = COALESCE($8, question_content_type),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $1 AND is_active = true
     RETURNING *
@@ -173,14 +355,40 @@ const updateQuestion = async (questionId, updateData, adminId) => {
     correctAnswer ?? null,
     difficultyLevel ? difficultyLevel.toLowerCase() : null,
     explanation ?? null,
-    questionType ? mapQuestionType(questionType) : null
+    questionType ? mapQuestionType(questionType) : null,
+    questionContentType ?? null
   ];
 
   console.log('Update query:', query);
   console.log('Update values:', values);
   console.log('Values length:', values.length);
 
-  return await updateOne(query, values);
+  const updatedQuestion = await updateOne(query, values);
+
+  // Handle images update if provided
+  if (images !== undefined && updatedQuestion) {
+    try {
+      // Delete existing images if replacing all
+      if (Array.isArray(images)) {
+        await QuestionImages.deleteAllQuestionImages(questionId);
+
+        // Create new images
+        if (images.length > 0) {
+          const imagePromises = images.map((imageData, index) =>
+            QuestionImages.createQuestionImage(questionId, {
+              ...imageData,
+              displayOrder: imageData.displayOrder || (index + 1)
+            }, adminId)
+          );
+          await Promise.all(imagePromises);
+        }
+      }
+    } catch (imageError) {
+      console.error('Error updating question images:', imageError);
+    }
+  }
+
+  return updatedQuestion;
 };
 
 // Update question content (text only)
@@ -435,33 +643,38 @@ const validateQuestionForSection = async (questionData, sectionId) => {
   const errors = [];
   const { options, correctAnswer } = questionData;
   
+  // Handle options - they might be objects or strings
+  const optionTexts = Array.isArray(options)
+    ? options.map(opt => typeof opt === 'string' ? opt : opt?.text || opt)
+    : [];
+
   // Validate based on answer pattern
   switch (section.answer_pattern) {
     case 'MULTIPLE_CHOICE':
       if (!options || !Array.isArray(options) || options.length !== section.answer_options) {
         errors.push(`Multiple choice questions must have exactly ${section.answer_options} options`);
       }
-      if (!correctAnswer || !options.includes(correctAnswer)) {
+      if (correctAnswer && !optionTexts.includes(correctAnswer)) {
         errors.push('Correct answer must be one of the provided options');
       }
       break;
-      
+
     case 'YES_NO':
-      if (!options || options.length !== 2 || !options.includes('Yes') || !options.includes('No')) {
+      if (!options || options.length !== 2 || !optionTexts.includes('Yes') || !optionTexts.includes('No')) {
         errors.push('Yes/No questions must have exactly two options: "Yes" and "No"');
       }
-      if (!['Yes', 'No'].includes(correctAnswer)) {
+      if (correctAnswer && !['Yes', 'No'].includes(correctAnswer)) {
         errors.push('Correct answer must be either "Yes" or "No"');
       }
       break;
-      
+
     case 'ODD_EVEN':
       // For odd/even patterns, options are usually the same across all questions
       if (!options || options.length < 2) {
         errors.push('Odd/Even pattern questions must have at least 2 options');
       }
       break;
-      
+
     case 'LIKERT_SCALE':
       if (!options || options.length !== section.answer_options) {
         errors.push(`Likert scale questions must have exactly ${section.answer_options} scale points`);
@@ -470,6 +683,146 @@ const validateQuestionForSection = async (questionData, sectionId) => {
   }
 
   return errors;
+};
+
+// Enhanced functions for multi-image support
+
+// Create question with multiple images
+const createQuestionWithImages = async (sectionId, questionData, imageFiles, adminId) => {
+  const createdQuestion = await createQuestion(sectionId, questionData, adminId);
+
+  if (imageFiles && imageFiles.length > 0) {
+    const fileStorageService = require('../services/fileStorageService');
+    const result = await fileStorageService.saveQuestionImages(
+      imageFiles,
+      createdQuestion.id,
+      {
+        uploadedBy: adminId,
+        uploadedByType: 'admin'
+      }
+    );
+
+    // Create question image records
+    if (result.savedFiles.length > 0) {
+      const imagePromises = result.savedFiles.map((file, index) =>
+        QuestionImages.createQuestionImage(createdQuestion.id, {
+          imageUrl: file.fileUrl,
+          imageFilename: file.filename,
+          displayOrder: index + 1,
+          fileSize: file.fileSize,
+          mimeType: file.mimeType
+        }, adminId)
+      );
+      await Promise.all(imagePromises);
+    }
+  }
+
+  return await getQuestionById(createdQuestion.id);
+};
+
+// Add images to existing question
+const addQuestionImages = async (questionId, imageFiles, adminId) => {
+  const fileStorageService = require('../services/fileStorageService');
+  const result = await fileStorageService.saveQuestionImages(
+    imageFiles,
+    questionId,
+    {
+      uploadedBy: adminId,
+      uploadedByType: 'admin'
+    }
+  );
+
+  if (result.savedFiles.length > 0) {
+    // Get current max order
+    const existingImages = await QuestionImages.getQuestionImages(questionId);
+    const maxOrder = existingImages.length > 0
+      ? Math.max(...existingImages.map(img => img.display_order))
+      : 0;
+
+    const imagePromises = result.savedFiles.map((file, index) =>
+      QuestionImages.createQuestionImage(questionId, {
+        imageUrl: file.fileUrl,
+        imageFilename: file.filename,
+        displayOrder: maxOrder + index + 1,
+        fileSize: file.fileSize,
+        mimeType: file.mimeType
+      }, adminId)
+    );
+    await Promise.all(imagePromises);
+  }
+
+  return result;
+};
+
+// Update question content type based on images
+const updateQuestionContentType = async (questionId, adminId) => {
+  const images = await QuestionImages.getQuestionImages(questionId);
+  let contentType = 'text_only';
+
+  if (images.length === 1) {
+    contentType = 'single_image';
+  } else if (images.length > 1) {
+    // Check if images have numbers
+    const hasNumbers = images.some(img => img.image_number);
+    contentType = hasNumbers ? 'numbered_images' : 'multiple_images';
+  }
+
+  const query = `
+    UPDATE ${TABLE_NAME}
+    SET question_content_type = $1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2 AND is_active = true
+    RETURNING question_content_type
+  `;
+
+  return await updateOne(query, [contentType, questionId]);
+};
+
+// Set numbered images
+const setQuestionImageNumbers = async (questionId, imageNumberMap, adminId) => {
+  const result = await QuestionImages.setNumberedImages(questionId, imageNumberMap);
+
+  // Update question content type to numbered_images
+  await updateQuestionContentType(questionId, adminId);
+
+  return result;
+};
+
+// Remove image from question
+const removeQuestionImageById = async (questionId, imageId, adminId) => {
+  const result = await QuestionImages.deleteQuestionImage(imageId);
+
+  // Update content type based on remaining images
+  await updateQuestionContentType(questionId, adminId);
+
+  return result;
+};
+
+// Get question with formatted images for different content types
+const getFormattedQuestion = async (questionId) => {
+  const question = await getQuestionById(questionId);
+
+  if (!question) return null;
+
+  // Format images based on content type
+  switch (question.question_content_type) {
+    case 'numbered_images':
+      question.images.sort((a, b) => {
+        const numA = parseInt(a.image_number) || 0;
+        const numB = parseInt(b.image_number) || 0;
+        return numA - numB;
+      });
+      break;
+
+    case 'multiple_images':
+    case 'single_image':
+      question.images.sort((a, b) => a.display_order - b.display_order);
+      break;
+
+    default:
+      break;
+  }
+
+  return question;
 };
 
 module.exports = {
@@ -487,5 +840,12 @@ module.exports = {
   getSectionNumbering,
   setSectionNumbering,
   applyNumberingToQuestions,
-  validateQuestionForSection
+  validateQuestionForSection,
+  // Enhanced functions
+  createQuestionWithImages,
+  addQuestionImages,
+  updateQuestionContentType,
+  setQuestionImageNumbers,
+  removeQuestionImageById,
+  getFormattedQuestion
 };

@@ -721,6 +721,354 @@ const bulkImportQuestions = async (req, res) => {
   }
 };
 
+// Enhanced controller methods for multi-image support
+
+// POST /api/v1/admin/sections/:sectionId/questions-with-images - Create question with images
+const createQuestionWithImages = async (req, res) => {
+  try {
+    const { sectionId } = req.params;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    const imageFiles = req.files;
+
+    // Validate UUID
+    if (!validateUUID(sectionId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid section ID format',
+        data: null
+      });
+    }
+
+    const questionData = req.body;
+
+    console.log('🚀 Received question data:', questionData);
+    console.log('🏷️ Question flag from body:', questionData.questionFlag);
+
+    // Normalize field names for validation
+    if (questionData.questionContentType) {
+      questionData.question_content_type = questionData.questionContentType;
+    }
+
+    // Always normalize question flag, even if empty/null
+    questionData.question_flag = questionData.questionFlag || null;
+    console.log('🏷️ Normalized question_flag:', questionData.question_flag);
+
+    // Basic validation
+    if (!questionData.questionText?.trim() && questionData.questionContentType !== 'options_only') {
+      return res.status(400).json({
+        success: false,
+        message: 'Question text is required for this content type',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.createQuestionWithImages(
+      sectionId,
+      questionData,
+      imageFiles,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Create question with images controller error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+      data: null,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// POST /api/v1/admin/questions/:id/images - Add multiple images to question
+const addQuestionImages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    const imageFiles = req.files;
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid question ID format',
+        data: null
+      });
+    }
+
+    if (!imageFiles || imageFiles.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No images provided',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.addQuestionImages(
+      id,
+      imageFiles,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Add question images controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// DELETE /api/v1/admin/questions/:questionId/images/:imageId - Remove specific image
+const removeQuestionImageById = async (req, res) => {
+  try {
+    const { questionId, imageId } = req.params;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUIDs
+    if (!validateUUID(questionId) || !validateUUID(imageId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid ID format',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.removeQuestionImageById(
+      questionId,
+      imageId,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Remove question image controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// PUT /api/v1/admin/questions/:id/images/reorder - Reorder question images
+const reorderQuestionImages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { imageOrders } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid question ID format',
+        data: null
+      });
+    }
+
+    if (!Array.isArray(imageOrders) || imageOrders.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image orders array is required',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.reorderQuestionImages(
+      id,
+      imageOrders,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Reorder question images controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// PUT /api/v1/admin/questions/:id/images/numbers - Set image numbers
+const setQuestionImageNumbers = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { imageNumberMap } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid question ID format',
+        data: null
+      });
+    }
+
+    if (!Array.isArray(imageNumberMap) || imageNumberMap.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image number map array is required',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.setQuestionImageNumbers(
+      id,
+      imageNumberMap,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Set question image numbers controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// PUT /api/v1/admin/questions/:id/content-type - Update question content type
+const updateQuestionContentType = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { contentType } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid question ID format',
+        data: null
+      });
+    }
+
+    if (!contentType) {
+      return res.status(400).json({
+        success: false,
+        message: 'Content type is required',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.updateQuestionContentType(
+      id,
+      contentType,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Update question content type controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// GET /api/v1/admin/questions/:id/formatted - Get formatted question with images
+const getFormattedQuestion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.admin.id;
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid question ID format',
+        data: null
+      });
+    }
+
+    const result = await AdminQuestionService.getFormattedQuestion(id, adminId);
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Get formatted question controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
 module.exports = {
   getSectionQuestions,
   createSectionQuestion,
@@ -736,5 +1084,13 @@ module.exports = {
   getQuestionPreview,
   reorderSectionQuestions,
   setQuestionNumber,
-  setSectionNumbering
+  setSectionNumbering,
+  // Enhanced methods
+  createQuestionWithImages,
+  addQuestionImages,
+  removeQuestionImageById,
+  reorderQuestionImages,
+  setQuestionImageNumbers,
+  updateQuestionContentType,
+  getFormattedQuestion
 };

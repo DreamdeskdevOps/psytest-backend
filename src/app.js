@@ -14,6 +14,8 @@ const adminQuestionRoutes = require('./routes/admin/questions');
 const adminAnswersRoutes = require('./routes/admin/answerOptions');
 const adminOptionTypesRoutes = require('./routes/admin/optionTypes');
 const adminConfigurationRoutes = require('./routes/admin/adminConfigurationRoutes');
+const adminFileRoutes = require('./routes/admin/fileRoutes');
+const fileServingRoutes = require('./routes/fileServing');
 // const testRoutes = require('./routes/tests');
 // const userRoutes = require('./routes/users');
 
@@ -37,6 +39,8 @@ app.use('/api/' + process.env.API_VERSION + '/admin/questions', adminQuestionRou
 app.use('/api/' + process.env.API_VERSION + '/admin/answers', adminAnswersRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/option-types', adminOptionTypesRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/configuration', adminConfigurationRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/files', adminFileRoutes);
+app.use('/api/' + process.env.API_VERSION + '/files', fileServingRoutes);
 
 // app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
 // app.use('/api/' + process.env.API_VERSION + '/users', userRoutes);

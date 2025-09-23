@@ -47,8 +47,8 @@ router.put('/questions/:id',
   adminQuestionController.updateQuestion
 );
 
-// DELETE /api/v1/admin/questions/:id - Delete question
-router.delete('/questions/:id', 
+// DELETE /api/v1/admin/questions/questions/:id - Delete question
+router.delete('/questions/:id',
   adminQuestionController.deleteQuestion
 );
 
@@ -95,8 +95,46 @@ router.put('/questions/:id/number',
 );
 
 // PUT /api/v1/admin/sections/:sectionId/numbering - Set section numbering style
-router.put('/sections/:sectionId/numbering', 
+router.put('/sections/:sectionId/numbering',
   adminQuestionController.setSectionNumbering
+);
+
+// Enhanced Image Management Routes
+// POST /api/v1/admin/questions/:id/images - Add multiple images to question
+router.post('/questions/:id/images',
+  upload.array('images', 10), // Allow up to 10 images
+  adminQuestionController.addQuestionImages
+);
+
+// DELETE /api/v1/admin/questions/:questionId/images/:imageId - Remove specific image
+router.delete('/questions/:questionId/images/:imageId',
+  adminQuestionController.removeQuestionImageById
+);
+
+// PUT /api/v1/admin/questions/:id/images/reorder - Reorder question images
+router.put('/questions/:id/images/reorder',
+  adminQuestionController.reorderQuestionImages
+);
+
+// PUT /api/v1/admin/questions/:id/images/numbers - Set image numbers
+router.put('/questions/:id/images/numbers',
+  adminQuestionController.setQuestionImageNumbers
+);
+
+// PUT /api/v1/admin/questions/:id/content-type - Update question content type
+router.put('/questions/:id/content-type',
+  adminQuestionController.updateQuestionContentType
+);
+
+// GET /api/v1/admin/questions/:id/formatted - Get formatted question with images
+router.get('/questions/:id/formatted',
+  adminQuestionController.getFormattedQuestion
+);
+
+// POST /api/v1/admin/sections/:sectionId/questions-with-images - Create question with images
+router.post('/sections/:sectionId/questions-with-images',
+  upload.array('images', 10),
+  adminQuestionController.createQuestionWithImages
 );
 
 module.exports = router;

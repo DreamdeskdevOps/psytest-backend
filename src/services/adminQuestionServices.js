@@ -1,5 +1,7 @@
 const QuestionModel = require('../models/Questions');
+const QuestionImages = require('../models/QuestionImages');
 const SectionModel = require('../models/Section');
+const fileStorageService = require('./fileStorageService');
 const { generateResponse } = require('../utils/helpers');
 const { validateQuestionData } = require('../utils/validation');
 const xlsx = require('xlsx');
@@ -43,7 +45,8 @@ const getSectionQuestions = async (sectionId, adminId) => {
       totalQuestions: questions.length,
       questions: questions.map(question => ({
         ...question,
-        options: question.options ? JSON.parse(question.options) : []
+        options: question.options ? JSON.parse(question.options) : [],
+        images: question.images || []
       }))
     };
 
@@ -729,6 +732,234 @@ const bulkImportQuestions = async (sectionId, fileBuffer, adminId, ipAddress, us
   }
 };
 
+// Enhanced question service functions for multi-image support
+
+// Create question with multiple images
+const createQuestionWithImages = async (sectionId, questionData, imageFiles, adminId, ipAddress, userAgent) => {
+  try {
+    // Verify section exists
+    const section = await SectionModel.getSectionById(sectionId);
+    if (!section) {
+      return generateResponse(false, 'Section not found', null, 404);
+    }
+
+    // Validate question data
+    const validation = validateQuestionData(questionData);
+    if (!validation.isValid) {
+      return generateResponse(false, validation.message, null, 400);
+    }
+
+    // Create question with images
+    const createdQuestion = await QuestionModel.createQuestionWithImages(
+      sectionId,
+      questionData,
+      imageFiles,
+      adminId
+    );
+
+    await logAdminActivity(adminId, 'QUESTION_CREATE_WITH_IMAGES', {
+      questionId: createdQuestion.id,
+      sectionId,
+      testId: section.test_id,
+      questionType: questionData.questionType,
+      contentType: questionData.questionContentType,
+      imageCount: imageFiles ? imageFiles.length : 0,
+      ipAddress,
+      userAgent
+    });
+
+    return generateResponse(true, 'Question with images created successfully', createdQuestion, 201);
+
+  } catch (error) {
+    console.error('Create question with images service error:', error);
+    console.error('Service error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    return generateResponse(false, `Failed to create question with images: ${error.message}`, null, 500);
+  }
+};
+
+// Add images to existing question
+const addQuestionImages = async (questionId, imageFiles, adminId, ipAddress, userAgent) => {
+  try {
+    const existingQuestion = await QuestionModel.getQuestionById(questionId);
+    if (!existingQuestion) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    const result = await QuestionModel.addQuestionImages(questionId, imageFiles, adminId);
+
+    await logAdminActivity(adminId, 'QUESTION_IMAGES_ADD', {
+      questionId,
+      sectionId: existingQuestion.section_id,
+      testId: existingQuestion.test_id,
+      addedImages: result.successCount,
+      failedImages: result.errorCount,
+      ipAddress,
+      userAgent
+    });
+
+    return generateResponse(
+      result.success,
+      result.success
+        ? `${result.successCount} images added successfully`
+        : `${result.successCount}/${result.totalFiles} images added`,
+      result,
+      result.success ? 200 : 207
+    );
+
+  } catch (error) {
+    console.error('Add question images service error:', error);
+    return generateResponse(false, 'Failed to add images to question', null, 500);
+  }
+};
+
+// Set numbered images for a question
+const setQuestionImageNumbers = async (questionId, imageNumberMap, adminId, ipAddress, userAgent) => {
+  try {
+    const existingQuestion = await QuestionModel.getQuestionById(questionId);
+    if (!existingQuestion) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    const result = await QuestionModel.setQuestionImageNumbers(questionId, imageNumberMap, adminId);
+
+    await logAdminActivity(adminId, 'QUESTION_IMAGES_NUMBER', {
+      questionId,
+      sectionId: existingQuestion.section_id,
+      testId: existingQuestion.test_id,
+      numberedImages: imageNumberMap.length,
+      ipAddress,
+      userAgent
+    });
+
+    return generateResponse(true, 'Image numbers set successfully', result, 200);
+
+  } catch (error) {
+    console.error('Set image numbers service error:', error);
+    return generateResponse(false, 'Failed to set image numbers', null, 500);
+  }
+};
+
+// Remove specific image from question
+const removeQuestionImageById = async (questionId, imageId, adminId, ipAddress, userAgent) => {
+  try {
+    const existingQuestion = await QuestionModel.getQuestionById(questionId);
+    if (!existingQuestion) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    const imageToRemove = await QuestionImages.getQuestionImageById(imageId);
+    if (!imageToRemove) {
+      return generateResponse(false, 'Image not found', null, 404);
+    }
+
+    const result = await QuestionModel.removeQuestionImageById(questionId, imageId, adminId);
+
+    await logAdminActivity(adminId, 'QUESTION_IMAGE_REMOVE', {
+      questionId,
+      imageId,
+      sectionId: existingQuestion.section_id,
+      testId: existingQuestion.test_id,
+      removedImageUrl: imageToRemove.image_url,
+      ipAddress,
+      userAgent
+    });
+
+    return generateResponse(true, 'Image removed successfully', result, 200);
+
+  } catch (error) {
+    console.error('Remove question image service error:', error);
+    return generateResponse(false, 'Failed to remove image', null, 500);
+  }
+};
+
+// Reorder question images
+const reorderQuestionImages = async (questionId, imageOrders, adminId, ipAddress, userAgent) => {
+  try {
+    const existingQuestion = await QuestionModel.getQuestionById(questionId);
+    if (!existingQuestion) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    const result = await QuestionImages.reorderQuestionImages(questionId, imageOrders);
+
+    await logAdminActivity(adminId, 'QUESTION_IMAGES_REORDER', {
+      questionId,
+      sectionId: existingQuestion.section_id,
+      testId: existingQuestion.test_id,
+      reorderedImages: imageOrders.length,
+      ipAddress,
+      userAgent
+    });
+
+    return generateResponse(true, 'Images reordered successfully', result, 200);
+
+  } catch (error) {
+    console.error('Reorder images service error:', error);
+    return generateResponse(false, 'Failed to reorder images', null, 500);
+  }
+};
+
+// Update question content type
+const updateQuestionContentType = async (questionId, contentType, adminId, ipAddress, userAgent) => {
+  try {
+    const existingQuestion = await QuestionModel.getQuestionById(questionId);
+    if (!existingQuestion) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    const validContentTypes = ['text_only', 'single_image', 'multiple_images', 'numbered_images', 'options_only'];
+    if (!validContentTypes.includes(contentType)) {
+      return generateResponse(false, 'Invalid content type', null, 400);
+    }
+
+    const result = await QuestionModel.updateQuestion(questionId, {
+      questionContentType: contentType
+    }, adminId);
+
+    await logAdminActivity(adminId, 'QUESTION_CONTENT_TYPE_UPDATE', {
+      questionId,
+      oldContentType: existingQuestion.question_content_type,
+      newContentType: contentType,
+      sectionId: existingQuestion.section_id,
+      testId: existingQuestion.test_id,
+      ipAddress,
+      userAgent
+    });
+
+    return generateResponse(true, 'Question content type updated successfully', result, 200);
+
+  } catch (error) {
+    console.error('Update content type service error:', error);
+    return generateResponse(false, 'Failed to update content type', null, 500);
+  }
+};
+
+// Get formatted question with images
+const getFormattedQuestion = async (questionId, adminId) => {
+  try {
+    const question = await QuestionModel.getFormattedQuestion(questionId);
+    if (!question) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    const formattedData = {
+      ...question,
+      options: question.options ? JSON.parse(question.options) : [],
+      images: question.images || []
+    };
+
+    return generateResponse(true, 'Formatted question retrieved successfully', formattedData, 200);
+
+  } catch (error) {
+    console.error('Get formatted question service error:', error);
+    return generateResponse(false, 'Failed to retrieve formatted question', null, 500);
+  }
+};
+
 module.exports = {
   getSectionQuestions,
   createSectionQuestion,
@@ -743,5 +974,13 @@ module.exports = {
   getQuestionPreview,
   reorderSectionQuestions,
   setQuestionNumber,
-  setSectionNumbering
+  setSectionNumbering,
+  // Enhanced functions
+  createQuestionWithImages,
+  addQuestionImages,
+  setQuestionImageNumbers,
+  removeQuestionImageById,
+  reorderQuestionImages,
+  updateQuestionContentType,
+  getFormattedQuestion
 };

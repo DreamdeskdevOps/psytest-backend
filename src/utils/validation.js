@@ -556,11 +556,11 @@ const validateSectionUpdateData = (updateData) => {
 const validateQuestionData = (questionData, isComplete = true) => {
   const {
     questionText, options, correctAnswer, marks,
-    difficultyLevel, questionType
+    difficultyLevel, questionType, question_content_type
   } = questionData;
 
-  // Question text validation
-  if (isComplete && (!questionText || questionText.trim().length < 5)) {
+  // Question text validation - skip for options_only content type
+  if (isComplete && question_content_type !== 'options_only' && (!questionText || questionText.trim().length < 5)) {
     return { isValid: false, message: 'Question text must be at least 5 characters long' };
   }
 
