@@ -199,25 +199,21 @@ const updateTestConfig = async (id, updateData, adminId) => {
 
 // Admin soft delete (preserves user attempt history)
 const adminDeleteTest = async (id, adminId) => {
-  const query = `
-    UPDATE ${TABLE_NAME}
-    SET 
-      is_active = false,
-      deleted_by = $2,
-      deleted_at = CURRENT_TIMESTAMP,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = $1
-    RETURNING id, title, is_active
-  `;
-  
   // Get attempt count before deletion
   const testInfo = await getOne(
     `SELECT id, title, (SELECT COUNT(*) FROM test_attempts WHERE test_id = $1) as attempt_count FROM ${TABLE_NAME} WHERE id = $1`,
     [id]
   );
-  
-  const result = await getOne(query, [id, adminId]);
-  return { ...result, attempt_count: testInfo?.attempt_count || 0 };
+
+  if (!testInfo) {
+    throw new Error('Test not found');
+  }
+
+  // Use actual DELETE instead of soft delete since the columns don't exist
+  const deleteQuery = `DELETE FROM ${TABLE_NAME} WHERE id = $1 RETURNING id, title`;
+  const result = await getOne(deleteQuery, [id]);
+
+  return { ...result, attempt_count: testInfo.attempt_count || 0 };
 };
 
 // Admin toggle test status with business rules

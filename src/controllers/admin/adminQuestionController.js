@@ -354,6 +354,52 @@ const duplicateQuestion = async (req, res) => {
   }
 };
 
+// POST /api/v1/admin/questions/bulk-delete - Bulk delete questions
+const bulkDeleteQuestions = async (req, res) => {
+  try {
+    const { questionIds } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate input
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Question IDs array is required and cannot be empty',
+        data: null
+      });
+    }
+
+    // Validate all UUIDs
+    for (const id of questionIds) {
+      if (!validateUUID(id)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid question ID format: ${id}`,
+          data: null
+        });
+      }
+    }
+
+    const result = await AdminQuestionService.bulkDeleteQuestions(questionIds, adminId, ipAddress, userAgent);
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Bulk delete questions controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
 // PUT /api/v1/admin/questions/:id/content - Update question text
 const updateQuestionContent = async (req, res) => {
   try {
@@ -1135,6 +1181,7 @@ module.exports = {
   getQuestionDetails,
   updateQuestion,
   deleteQuestion,
+  bulkDeleteQuestions,
   duplicateQuestion,
   updateQuestionContent,
   uploadQuestionImage,

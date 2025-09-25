@@ -141,15 +141,19 @@ class ScoringConfiguration {
                 RETURNING *
             `;
 
+            console.log('💾 DEBUG: configData for insert:', configData);
+            const replacements = [
+                testId,
+                sectionId,
+                scoringType,
+                JSON.stringify(scoringPattern),
+                createdBy,
+                createdBy
+            ];
+            console.log('💾 DEBUG: replacements for insert:', replacements);
+
             const results = await sequelize.query(insertQuery, {
-                replacements: [
-                    testId,
-                    sectionId,
-                    scoringType,
-                    JSON.stringify(scoringPattern),
-                    createdBy,
-                    createdBy  // updated_by is also set to createdBy for new records
-                ],
+                replacements: replacements,
                 type: sequelize.QueryTypes.SELECT
             });
 

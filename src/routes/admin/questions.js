@@ -58,6 +58,11 @@ router.delete('/questions/:id',
   adminQuestionController.deleteQuestion
 );
 
+// POST /api/v1/admin/questions/bulk-delete - Bulk delete questions
+router.post('/bulk-delete',
+  adminQuestionController.bulkDeleteQuestions
+);
+
 // POST /api/v1/admin/questions/:id/duplicate - Duplicate question
 router.post('/questions/:id/duplicate', 
   adminQuestionController.duplicateQuestion

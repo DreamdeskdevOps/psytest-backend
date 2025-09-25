@@ -9,8 +9,12 @@ const validateScoringConfig = [
     body('scoringType')
         .notEmpty()
         .withMessage('Scoring type is required')
-        .isIn(['flag_based'])
-        .withMessage('Invalid scoring type'),
+        .isIn(['flag_based', 'flag-based', 'range_based', 'range-based'])
+        .withMessage('Invalid scoring type')
+        .customSanitizer(value => {
+            // Normalize to underscore format for database
+            return value.replace('-', '_');
+        }),
 
     body('scoringPattern')
         .isObject()
@@ -18,15 +22,7 @@ const validateScoringConfig = [
 
     body('scoringPattern.type')
         .notEmpty()
-        .withMessage('Scoring pattern type is required')
-        .isIn([
-            // Old types (for backward compatibility)
-            'highest_only', 'top_3', 'top_4', 'top_5', 'custom_top_n',
-            // New scoring pattern types
-            'preset-highest', 'preset-lowest', 'preset-top-3-rie', 'preset-top-5', 'custom-flag-pattern',
-            'range-male-adult', 'range-female-adult', 'range-child', 'range-adolescent', 'custom-range-pattern'
-        ])
-        .withMessage('Invalid scoring pattern type'),
+        .withMessage('Scoring pattern type is required'),
 
     body('sectionId')
         .optional()

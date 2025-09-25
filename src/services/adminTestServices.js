@@ -381,11 +381,15 @@ const bulkOperations = async (operation, testIds, operationData, adminId, ipAddr
             break;
             
           case 'delete':
-            const { getOne: deleteGetOne } = require('../config/database');
-            result = await deleteGetOne(
+            const { query: deleteQuery } = require('../config/database');
+            const deleteResult = await deleteQuery(
               'DELETE FROM tests WHERE id = $1 RETURNING id, title',
               [testId]
             );
+            result = deleteResult.rows[0];
+            if (!result) {
+              throw new Error('Test not found or already deleted');
+            }
             break;
             
           case 'update_test_type':

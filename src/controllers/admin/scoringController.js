@@ -124,9 +124,13 @@ class ScoringController {
      */
     static async saveConfiguration(req, res) {
         try {
+            console.log('🔍 DEBUG: Received request body:', JSON.stringify(req.body, null, 2));
+            console.log('🔍 DEBUG: Received params:', req.params);
+
             // Check validation results
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
+                console.log('❌ Validation errors:', errors.array());
                 return res.status(400).json({
                     success: false,
                     message: 'Validation failed',
@@ -140,6 +144,13 @@ class ScoringController {
                 scoringType,
                 scoringPattern
             } = req.body;
+
+            console.log('✅ Passed validation. Processing data:', {
+                testId,
+                sectionId,
+                scoringType,
+                scoringPattern
+            });
 
             // Validate configuration
             const validation = ScoringConfiguration.validateConfiguration({
@@ -161,7 +172,7 @@ class ScoringController {
                 sectionId: sectionId || null,
                 scoringType,
                 scoringPattern,
-                createdBy: req.user?.id || req.admin?.id
+                createdBy: req.user?.id || req.admin?.id || null
             });
 
             res.json({

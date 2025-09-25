@@ -256,6 +256,74 @@ const deleteQuestion = async (questionId, adminId, ipAddress, userAgent) => {
   }
 };
 
+// Bulk delete questions
+const bulkDeleteQuestions = async (questionIds, adminId, ipAddress, userAgent) => {
+  try {
+    const results = [];
+    const errors = [];
+
+    // Process each question individually to maintain business rules
+    for (const questionId of questionIds) {
+      try {
+        const existingQuestion = await QuestionModel.getQuestionById(questionId);
+        if (!existingQuestion) {
+          errors.push({ questionId, error: 'Question not found' });
+          continue;
+        }
+
+        // Business rule: Check if this would leave section with no questions
+        const sectionQuestions = await QuestionModel.getQuestionsBySection(existingQuestion.section_id);
+        if (sectionQuestions.length === 1) {
+          errors.push({
+            questionId,
+            error: `Cannot delete the only question in section (${existingQuestion.section_id})`
+          });
+          continue;
+        }
+
+        const result = await QuestionModel.deleteQuestion(questionId, adminId);
+        results.push({ questionId, deleted: true, answerCount: result.answer_count });
+
+        // Log individual admin activity
+        await logAdminActivity(adminId, 'QUESTION_BULK_DELETE', {
+          questionId: questionId,
+          sectionId: existingQuestion.section_id,
+          testId: existingQuestion.test_id,
+          questionText: existingQuestion.question_text.substring(0, 100),
+          ipAddress,
+          userAgent
+        });
+
+        // Update section counters
+        await SectionModel.updateTestCounters(existingQuestion.test_id);
+
+      } catch (error) {
+        console.error(`Error deleting question ${questionId}:`, error);
+        errors.push({ questionId, error: error.message || 'Unknown error' });
+      }
+    }
+
+    const successCount = results.length;
+    const errorCount = errors.length;
+
+    return generateResponse(
+      true,
+      `Bulk delete completed: ${successCount} deleted, ${errorCount} errors`,
+      {
+        successCount,
+        errorCount,
+        results,
+        errors
+      },
+      200
+    );
+
+  } catch (error) {
+    console.error('Bulk delete questions service error:', error);
+    return generateResponse(false, 'Failed to bulk delete questions', null, 500);
+  }
+};
+
 // Duplicate question
 const duplicateQuestion = async (originalQuestionId, adminId, ipAddress, userAgent) => {
   try {
@@ -1037,6 +1105,7 @@ module.exports = {
   getQuestionDetails,
   updateQuestionInfo,
   deleteQuestion,
+  bulkDeleteQuestions,
   duplicateQuestion,
   updateQuestionContent,
   updateQuestionImage,
