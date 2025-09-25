@@ -330,7 +330,7 @@ const updateQuestion = async (questionId, updateData, adminId) => {
   const {
     questionText, questionNumber, options, correctAnswer,
     marks, difficultyLevel, explanation, questionType, isRequired,
-    questionContentType, images
+    questionContentType, images, questionFlag
   } = updateData;
 
   const query = `
@@ -343,6 +343,7 @@ const updateQuestion = async (questionId, updateData, adminId) => {
       answer_explanation = COALESCE($6, answer_explanation),
       question_type = COALESCE($7, question_type),
       question_content_type = COALESCE($8, question_content_type),
+      question_flag = COALESCE($9, question_flag),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = $1 AND is_active = true
     RETURNING *
@@ -356,7 +357,8 @@ const updateQuestion = async (questionId, updateData, adminId) => {
     difficultyLevel ? difficultyLevel.toLowerCase() : null,
     explanation ?? null,
     questionType ? mapQuestionType(questionType) : null,
-    questionContentType ?? null
+    questionContentType ?? null,
+    questionFlag ?? null
   ];
 
   console.log('Update query:', query);
@@ -720,6 +722,44 @@ const createQuestionWithImages = async (sectionId, questionData, imageFiles, adm
   return await getQuestionById(createdQuestion.id);
 };
 
+// Update question with images (identical to create)
+const updateQuestionWithImages = async (questionId, questionData, imageFiles, adminId) => {
+  // First update the basic question data
+  const updatedQuestion = await updateQuestion(questionId, questionData, adminId);
+
+  if (imageFiles && imageFiles.length > 0) {
+    // Remove existing images first
+    await removeQuestionImages(questionId, adminId);
+
+    // Add new images using the same logic as create
+    const fileStorageService = require('../services/fileStorageService');
+    const result = await fileStorageService.saveQuestionImages(
+      imageFiles,
+      questionId,
+      {
+        uploadedBy: adminId,
+        uploadedByType: 'admin'
+      }
+    );
+
+    // Create question image records
+    if (result.savedFiles.length > 0) {
+      const imagePromises = result.savedFiles.map((file, index) =>
+        QuestionImages.createQuestionImage(questionId, {
+          imageUrl: file.fileUrl,
+          imageFilename: file.filename,
+          displayOrder: index + 1,
+          fileSize: file.fileSize,
+          mimeType: file.mimeType
+        }, adminId)
+      );
+      await Promise.all(imagePromises);
+    }
+  }
+
+  return await getQuestionById(questionId);
+};
+
 // Add images to existing question
 const addQuestionImages = async (questionId, imageFiles, adminId) => {
   const fileStorageService = require('../services/fileStorageService');
@@ -843,6 +883,7 @@ module.exports = {
   validateQuestionForSection,
   // Enhanced functions
   createQuestionWithImages,
+  updateQuestionWithImages,
   addQuestionImages,
   updateQuestionContentType,
   setQuestionImageNumbers,

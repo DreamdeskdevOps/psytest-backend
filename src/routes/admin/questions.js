@@ -43,8 +43,14 @@ router.get('/questions/:id',
 );
 
 // PUT /api/v1/admin/questions/:id - Update question
-router.put('/questions/:id', 
+router.put('/questions/:id',
   adminQuestionController.updateQuestion
+);
+
+// PUT /api/v1/admin/questions/:id/with-images - Update question with images (identical to create)
+router.put('/:id/with-images',
+  upload.array('images', 10),
+  adminQuestionController.updateQuestionWithImages
 );
 
 // DELETE /api/v1/admin/questions/questions/:id - Delete question

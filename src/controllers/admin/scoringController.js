@@ -38,8 +38,8 @@ class ScoringController {
             const { sectionId } = req.query;
 
             const flags = await ScoringConfiguration.getTestFlags(
-                parseInt(testId),
-                sectionId ? parseInt(sectionId) : null
+                testId,
+                sectionId || null
             );
 
             res.json({
@@ -65,7 +65,7 @@ class ScoringController {
         try {
             const { testId } = req.params;
 
-            const configurations = await ScoringConfiguration.getByTestId(parseInt(testId));
+            const configurations = await ScoringConfiguration.getByTestId(testId);
 
             res.json({
                 success: true,
@@ -92,8 +92,8 @@ class ScoringController {
             const { sectionId } = req.query;
 
             const configuration = await ScoringConfiguration.getConfiguration(
-                parseInt(testId),
-                sectionId ? parseInt(sectionId) : null
+                testId,
+                sectionId || null
             );
 
             if (!configuration) {
@@ -157,8 +157,8 @@ class ScoringController {
 
             // Save configuration
             const configuration = await ScoringConfiguration.saveConfiguration({
-                testId: parseInt(testId),
-                sectionId: sectionId ? parseInt(sectionId) : null,
+                testId: testId,
+                sectionId: sectionId || null,
                 scoringType,
                 scoringPattern,
                 createdBy: req.user?.id || req.admin?.id
@@ -188,7 +188,7 @@ class ScoringController {
         try {
             const { configId } = req.params;
 
-            const result = await ScoringConfiguration.deleteConfiguration(parseInt(configId));
+            const result = await ScoringConfiguration.deleteConfiguration(configId);
 
             if (!result) {
                 return res.status(404).json({
@@ -221,7 +221,7 @@ class ScoringController {
         try {
             const { testId } = req.params;
 
-            const summary = await ScoringConfiguration.getConfigurationSummary(parseInt(testId));
+            const summary = await ScoringConfiguration.getConfigurationSummary(testId);
 
             res.json({
                 success: true,
@@ -290,8 +290,8 @@ class ScoringController {
 
             // Get test flags
             const flags = await ScoringConfiguration.getTestFlags(
-                parseInt(testId),
-                sectionId ? parseInt(sectionId) : null
+                testId,
+                sectionId || null
             );
 
             if (flags.length === 0) {
@@ -309,8 +309,8 @@ class ScoringController {
 
             // Get configuration
             const config = await ScoringConfiguration.getConfiguration(
-                parseInt(testId),
-                sectionId ? parseInt(sectionId) : null
+                testId,
+                sectionId || null
             );
 
             if (!config) {

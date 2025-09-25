@@ -20,7 +20,7 @@ async function testSaveConfiguration() {
                 flagCount: 1,
                 orderDirection: 'high-to-low'
             },
-            createdBy: '12345678-1234-1234-1234-123456789012' // Mock admin UUID
+            createdBy: 'ab1b605a-7f4b-42da-995f-77737b6293c3' // Valid admin UUID
         };
 
         console.log('📋 Configuration data:', JSON.stringify(configData, null, 2));

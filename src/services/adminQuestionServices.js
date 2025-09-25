@@ -690,15 +690,41 @@ const bulkImportQuestions = async (sectionId, fileBuffer, adminId, ipAddress, us
 
     // 4. Create Questions in the Transaction
     const createdQuestions = [];
-    for (const question of questionsData) {
+    console.log('📊 Processing', questionsData.length, 'questions from CSV/Excel import');
+
+    for (let i = 0; i < questionsData.length; i++) {
+      const question = questionsData[i];
       const questionData = {
         questionText: question.question_text,
         questionOrder: question.order_index,
-        questionType: question.question_type || 'multiple_choice',
+        questionType: question.question_type || 'MULTIPLE_CHOICE',
+        difficultyLevel: question.difficulty_level || question.difficulty || 'MEDIUM',
+        marks: parseFloat(question.marks) || 1,
+        explanation: question.explanation || question.answer_explanation || '',
+        questionFlag: question.question_flag || question.flag || '', // Support both column names
+        questionNumber: question.question_number || '',
+        isRequired: question.is_required !== undefined ? question.is_required : true
       };
 
       if (!questionData.questionText || String(questionData.questionText).trim() === '') {
         throw new Error(`Row with order_index ${question.order_index} has empty question_text.`);
+      }
+
+      // Validate difficulty level
+      const validDifficultyLevels = ['EASY', 'MEDIUM', 'HARD', 'EXPERT'];
+      if (!validDifficultyLevels.includes(questionData.difficultyLevel)) {
+        questionData.difficultyLevel = 'MEDIUM';
+      }
+
+      // Validate question type
+      const validQuestionTypes = ['STANDARD', 'TEXT', 'IMAGE', 'MIXED', 'SCENARIO', 'IMAGE_BASED', 'AUDIO_BASED', 'VIDEO_BASED', 'MULTIPLE_CHOICE', 'SINGLE_CHOICE', 'TRUE_FALSE', 'SHORT_ANSWER', 'ESSAY', 'FILL_BLANK'];
+      if (!validQuestionTypes.includes(questionData.questionType)) {
+        questionData.questionType = 'MULTIPLE_CHOICE';
+      }
+
+      // Log question flag for debugging
+      if (questionData.questionFlag) {
+        console.log(`🏷️ Question ${i + 1} has flag: "${questionData.questionFlag}"`);
       }
 
       const newQuestion = await QuestionModel.createQuestion(sectionId, questionData, adminId, t);
@@ -778,6 +804,50 @@ const createQuestionWithImages = async (sectionId, questionData, imageFiles, adm
       stack: error.stack
     });
     return generateResponse(false, `Failed to create question with images: ${error.message}`, null, 500);
+  }
+};
+
+// Update question with images (identical to create)
+const updateQuestionWithImages = async (questionId, questionData, imageFiles, adminId, ipAddress, userAgent) => {
+  try {
+    // Verify question exists
+    const existingQuestion = await QuestionModel.getQuestionById(questionId);
+    if (!existingQuestion) {
+      return generateResponse(false, 'Question not found', null, 404);
+    }
+
+    // Validate question data
+    const validation = validateQuestionData(questionData, false); // partial validation for update
+    if (!validation.isValid) {
+      return generateResponse(false, validation.message, null, 400);
+    }
+
+    // Update question with images using the same logic as create
+    const updatedQuestion = await QuestionModel.updateQuestionWithImages(questionId, questionData, imageFiles, adminId);
+
+    await logAdminActivity(adminId, 'QUESTION_UPDATE_WITH_IMAGES', {
+      questionId,
+      sectionId: existingQuestion.section_id,
+      testId: existingQuestion.test_id,
+      questionType: questionData.questionType,
+      contentType: questionData.questionContentType,
+      imageCount: imageFiles ? imageFiles.length : 0,
+      ipAddress,
+      userAgent
+    });
+
+    const responseData = {
+      ...updatedQuestion,
+      options: updatedQuestion.options ?
+        (typeof updatedQuestion.options === 'string' ?
+          JSON.parse(updatedQuestion.options) : updatedQuestion.options) : []
+    };
+
+    return generateResponse(true, 'Question updated successfully', responseData, 200);
+
+  } catch (error) {
+    console.error('Update question with images service error:', error);
+    return generateResponse(false, `Failed to update question with images: ${error.message}`, null, 500);
   }
 };
 
@@ -977,6 +1047,7 @@ module.exports = {
   setSectionNumbering,
   // Enhanced functions
   createQuestionWithImages,
+  updateQuestionWithImages,
   addQuestionImages,
   setQuestionImageNumbers,
   removeQuestionImageById,

@@ -186,7 +186,8 @@ const updateQuestion = async (req, res) => {
       difficultyLevel,
       explanation,
       questionType,
-      isRequired
+      isRequired,
+      questionFlag
     } = req.body;
 
     // Build update data (only include provided fields)
@@ -200,6 +201,7 @@ const updateQuestion = async (req, res) => {
     if (explanation !== undefined) updateData.explanation = explanation?.trim();
     if (questionType !== undefined) updateData.questionType = questionType;
     if (isRequired !== undefined) updateData.isRequired = Boolean(isRequired);
+    if (questionFlag !== undefined) updateData.questionFlag = questionFlag;
 
     const result = await AdminQuestionService.updateQuestionInfo(
       id, 
@@ -217,6 +219,63 @@ const updateQuestion = async (req, res) => {
 
   } catch (error) {
     console.error('Update question controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// PUT /api/v1/admin/questions/:id/with-images - Update question with images (identical to create)
+const updateQuestionWithImages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    const imageFiles = req.files;
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid question ID format',
+        data: null
+      });
+    }
+
+    const questionData = req.body;
+
+    console.log('🔄 Received question update data:', questionData);
+    console.log('🏷️ Question flag from body:', questionData.questionFlag);
+
+    // Normalize field names for validation
+    if (questionData.questionContentType) {
+      questionData.question_content_type = questionData.questionContentType;
+    }
+
+    // Always normalize question flag, even if empty/null
+    questionData.question_flag = questionData.questionFlag || null;
+    console.log('🏷️ Normalized question_flag:', questionData.question_flag);
+
+    const result = await AdminQuestionService.updateQuestionWithImages(
+      id,
+      questionData,
+      imageFiles,
+      adminId,
+      ipAddress,
+      userAgent
+    );
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Update question with images controller error:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -1087,6 +1146,7 @@ module.exports = {
   setSectionNumbering,
   // Enhanced methods
   createQuestionWithImages,
+  updateQuestionWithImages,
   addQuestionImages,
   removeQuestionImageById,
   reorderQuestionImages,

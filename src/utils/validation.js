@@ -601,8 +601,11 @@ const validateQuestionData = (questionData, isComplete = true) => {
     };
   }
 
-  // Question type validation - match database constraints
-  const allowedQuestionTypes = ['STANDARD', 'TEXT', 'IMAGE', 'MIXED', 'SCENARIO', 'IMAGE_BASED', 'AUDIO_BASED', 'VIDEO_BASED'];
+  // Question type validation - match database constraints and frontend values
+  const allowedQuestionTypes = [
+    'STANDARD', 'TEXT', 'IMAGE', 'MIXED', 'SCENARIO', 'IMAGE_BASED', 'AUDIO_BASED', 'VIDEO_BASED',
+    'MULTIPLE_CHOICE', 'SINGLE_CHOICE', 'TRUE_FALSE', 'SHORT_ANSWER', 'ESSAY', 'FILL_BLANK'
+  ];
   if (questionType && !allowedQuestionTypes.includes(questionType)) {
     return {
       isValid: false,

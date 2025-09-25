@@ -1,4 +1,4 @@
-const { getOne, insertOne, updateOne, deleteOne, getMany } = require('../config/database');
+const { getOne, insertOne, updateOne, deleteOne, getMany, executeQuery, sequelize } = require('../config/database');
 
 const TABLE_NAME = 'scoring_configurations';
 
@@ -44,23 +44,33 @@ class ScoringConfiguration {
         try {
             const query = `
                 SELECT * FROM ${TABLE_NAME}
-                WHERE test_id = $1 AND (section_id = $2 OR ($2 IS NULL AND section_id IS NULL))
+                WHERE test_id = ? AND (section_id = ? OR (? IS NULL AND section_id IS NULL))
                 AND is_active = true
                 ORDER BY created_at DESC
                 LIMIT 1
             `;
 
             console.log('🔍 Executing getConfiguration query:', query);
-            console.log('📋 With parameters:', [testId, sectionId]);
+            console.log('📋 With parameters:', [testId, sectionId, sectionId]);
 
-            const result = await getOne(query, [testId, sectionId]);
+            const [results] = await sequelize.query(query, {
+                replacements: [testId, sectionId, sectionId],
+                type: sequelize.QueryTypes.SELECT
+            });
+
+            const result = results ? results : null;
             console.log('📊 Configuration query result:', result);
 
             if (result) {
-                try {
-                    result.scoring_pattern = JSON.parse(result.scoring_pattern || '{}');
-                } catch (parseError) {
-                    console.error('⚠️ Error parsing scoring_pattern JSON:', parseError);
+                // Check if scoring_pattern is already an object (parsed by Sequelize) or a string
+                if (typeof result.scoring_pattern === 'string') {
+                    try {
+                        result.scoring_pattern = JSON.parse(result.scoring_pattern || '{}');
+                    } catch (parseError) {
+                        console.error('⚠️ Error parsing scoring_pattern JSON:', parseError);
+                        result.scoring_pattern = {};
+                    }
+                } else if (!result.scoring_pattern) {
                     result.scoring_pattern = {};
                 }
             }
@@ -96,47 +106,61 @@ class ScoringConfiguration {
             const updateQuery = `
                 UPDATE ${TABLE_NAME}
                 SET
-                    scoring_type = $1,
-                    scoring_pattern = $2,
-                    updated_by = $3,
+                    scoring_type = ?,
+                    scoring_pattern = ?,
+                    updated_by = ?,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $4
+                WHERE id = ?
                 RETURNING *
             `;
 
-            const result = await updateOne(updateQuery, [
-                scoringType,
-                JSON.stringify(scoringPattern),
-                createdBy,
-                existingConfig.id
-            ]);
+            const results = await sequelize.query(updateQuery, {
+                replacements: [
+                    scoringType,
+                    JSON.stringify(scoringPattern),
+                    createdBy,
+                    existingConfig.id
+                ],
+                type: sequelize.QueryTypes.SELECT
+            });
 
-            return {
-                ...result,
-                scoring_pattern: JSON.parse(result.scoring_pattern || '{}')
-            };
+            const result = results[0];
+            // Handle scoring_pattern parsing - it might already be an object
+            if (typeof result.scoring_pattern === 'string') {
+                result.scoring_pattern = JSON.parse(result.scoring_pattern || '{}');
+            } else if (!result.scoring_pattern) {
+                result.scoring_pattern = {};
+            }
+            return result;
         } else {
             // Create new
             const insertQuery = `
                 INSERT INTO ${TABLE_NAME}
                 (test_id, section_id, scoring_type, scoring_pattern, created_by, updated_by)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES (?, ?, ?, ?, ?, ?)
                 RETURNING *
             `;
 
-            const result = await insertOne(insertQuery, [
-                testId,
-                sectionId,
-                scoringType,
-                JSON.stringify(scoringPattern),
-                createdBy,
-                createdBy  // updated_by is also set to createdBy for new records
-            ]);
+            const results = await sequelize.query(insertQuery, {
+                replacements: [
+                    testId,
+                    sectionId,
+                    scoringType,
+                    JSON.stringify(scoringPattern),
+                    createdBy,
+                    createdBy  // updated_by is also set to createdBy for new records
+                ],
+                type: sequelize.QueryTypes.SELECT
+            });
 
-            return {
-                ...result,
-                scoring_pattern: JSON.parse(result.scoring_pattern || '{}')
-            };
+            const result = results[0];
+            // Handle scoring_pattern parsing - it might already be an object
+            if (typeof result.scoring_pattern === 'string') {
+                result.scoring_pattern = JSON.parse(result.scoring_pattern || '{}');
+            } else if (!result.scoring_pattern) {
+                result.scoring_pattern = {};
+            }
+            return result;
         }
     }
 
