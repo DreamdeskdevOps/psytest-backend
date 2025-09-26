@@ -308,8 +308,8 @@ class ScoringPatterns {
                     configuration.ranges.forEach((range, index) => {
                         if (typeof range.min !== 'number' || typeof range.max !== 'number') {
                             errors.push(`Range ${index + 1}: min and max must be numbers`);
-                        } else if (range.min >= range.max) {
-                            errors.push(`Range ${index + 1}: min must be less than max`);
+                        } else if (range.min > range.max) {
+                            errors.push(`Range ${index + 1}: min must be less than or equal to max`);
                         }
 
                         if (!range.label || typeof range.label !== 'string' || range.label.trim() === '') {
@@ -322,7 +322,15 @@ class ScoringPatterns {
                         for (let j = i + 1; j < configuration.ranges.length; j++) {
                             const range1 = configuration.ranges[i];
                             const range2 = configuration.ranges[j];
-                            if (range1.min <= range2.max && range2.min <= range1.max) {
+
+                            // Check if ranges actually overlap
+                            // Two ranges overlap if they share any common values
+                            // For ranges [a,b] and [c,d], they overlap if max(a,c) <= min(b,d)
+                            const maxStart = Math.max(range1.min, range2.min);
+                            const minEnd = Math.min(range1.max, range2.max);
+                            const hasOverlap = maxStart <= minEnd;
+
+                            if (hasOverlap) {
                                 errors.push(`Ranges ${i + 1} and ${j + 1} overlap`);
                             }
                         }
