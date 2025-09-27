@@ -17,6 +17,8 @@ const adminConfigurationRoutes = require('./routes/admin/adminConfigurationRoute
 const adminFileRoutes = require('./routes/admin/fileRoutes');
 const adminScoringRoutes = require('./routes/admin/scoring');
 const adminScoringPatternsRoutes = require('./routes/admin/scoringPatterns');
+const adminResultRoutes = require('./routes/admin/results');
+const adminResultComponentRoutes = require('./routes/admin/resultComponents');
 const fileServingRoutes = require('./routes/fileServing');
 // const testRoutes = require('./routes/tests');
 // const userRoutes = require('./routes/users');
@@ -44,6 +46,8 @@ app.use('/api/' + process.env.API_VERSION + '/admin/configuration', adminConfigu
 app.use('/api/' + process.env.API_VERSION + '/admin/files', adminFileRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/scoring', adminScoringRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/scoring-patterns', adminScoringPatternsRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/results', adminResultRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/result-components', adminResultComponentRoutes);
 app.use('/api/' + process.env.API_VERSION + '/files', fileServingRoutes);
 
 // app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
