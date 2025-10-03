@@ -436,6 +436,39 @@ router.post('/debug-complete-existing-test', async (req, res) => {
   }
 });
 
+// Debug endpoint to remove hardcoded test result
+router.delete('/debug-remove-hardcoded/:attemptId', async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const { executeQuery } = require('../config/database');
+
+    console.log('🗑️ Removing hardcoded test attempt:', attemptId);
+
+    // Delete the hardcoded test attempt
+    const result = await executeQuery(`
+      DELETE FROM test_attempts
+      WHERE id = $1
+    `, [attemptId]);
+
+    console.log('✅ Hardcoded test attempt removed successfully');
+
+    res.json({
+      success: true,
+      message: 'Hardcoded test attempt removed successfully',
+      attemptId: attemptId,
+      rowsAffected: result
+    });
+
+  } catch (error) {
+    console.error('❌ Remove hardcoded test error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove hardcoded test',
+      error: error.message
+    });
+  }
+});
+
 // Simplified submit endpoint for testing - just return scoring results
 router.post('/session/:sessionToken/submit-simple', async (req, res) => {
   try {
