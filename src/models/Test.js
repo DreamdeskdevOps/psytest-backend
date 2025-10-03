@@ -368,7 +368,7 @@ const getAdminTestAnalytics = async (id) => {
 // Reorder test sections (admin functionality)
 const reorderTestSections = async (testId, sectionOrders, adminId) => {
   // sectionOrders = [{ sectionId, newOrder }, ...]
-  
+
   const updatePromises = sectionOrders.map(({ sectionId, newOrder }) => {
     const query = `
       UPDATE test_sections
@@ -380,10 +380,10 @@ const reorderTestSections = async (testId, sectionOrders, adminId) => {
   });
 
   const results = await Promise.all(updatePromises);
-  
+
   // Log the reorder action
   await insertOne(
-    `INSERT INTO admin_activity_logs (admin_id, action_type, action_description, created_at) 
+    `INSERT INTO admin_activity_logs (admin_id, action_type, action_description, created_at)
      VALUES ($1, 'SECTION_REORDER', $2, CURRENT_TIMESTAMP)`,
     [adminId, `Reordered sections for test ${testId}`]
   );
@@ -391,7 +391,67 @@ const reorderTestSections = async (testId, sectionOrders, adminId) => {
   return results;
 };
 
+// Student/User functions - simplified for public access
+const getAllTests = async (filters = {}) => {
+  let query = `
+    SELECT
+      t.id, t.title, t.description, t.test_type,
+      t.total_duration, t.total_questions,
+      t.is_active, t.is_free, t.price, t.passing_score, t.max_attempts,
+      t.created_at, t.updated_at
+    FROM ${TABLE_NAME} t
+    WHERE t.is_active = true
+  `;
+
+  const values = [];
+  let paramIndex = 1;
+
+  // User filters
+  if (filters.testType) {
+    query += ` AND t.test_type = $${paramIndex}`;
+    values.push(filters.testType);
+    paramIndex++;
+  }
+
+  if (filters.isFree !== undefined) {
+    query += ` AND t.is_free = $${paramIndex}`;
+    values.push(filters.isFree);
+    paramIndex++;
+  }
+
+  if (filters.search) {
+    query += ` AND (t.title ILIKE $${paramIndex} OR t.description ILIKE $${paramIndex})`;
+    values.push(`%${filters.search}%`);
+    paramIndex++;
+  }
+
+  query += ` ORDER BY t.created_at DESC`;
+
+  if (filters.limit) {
+    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    values.push(filters.limit, filters.offset || 0);
+  }
+
+  return await getMany(query, values);
+};
+
+// Get single test by ID for students
+const getTestById = async (id) => {
+  const query = `
+    SELECT
+      t.id, t.title, t.description, t.instructions, t.test_type,
+      t.total_duration, t.total_questions, t.is_active,
+      t.is_free, t.price, t.passing_score, t.max_attempts,
+      t.show_results, t.show_correct_answers, t.randomize_questions,
+      t.created_at, t.updated_at
+    FROM ${TABLE_NAME} t
+    WHERE t.id = $1 AND t.is_active = true
+  `;
+  return await getOne(query, [id]);
+};
+
 module.exports = {
+  // Admin functions
   getAllTestsForAdmin,
   getTestForAdmin,
   createCustomTest,
@@ -403,5 +463,9 @@ module.exports = {
   adminUpdateTestType,
   adminDuplicateTest,
   getAdminTestAnalytics,
-  reorderTestSections
+  reorderTestSections,
+
+  // Student/User functions
+  getAllTests,
+  getTestById
 };

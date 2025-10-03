@@ -20,6 +20,8 @@ const adminScoringPatternsRoutes = require('./routes/admin/scoringPatterns');
 const adminResultRoutes = require('./routes/admin/results');
 const adminResultComponentRoutes = require('./routes/admin/resultComponents');
 const fileServingRoutes = require('./routes/fileServing');
+const testAttemptRoutes = require('./routes/testAttempts');
+const userTestRoutes = require('./routes/userTests');
 // const testRoutes = require('./routes/tests');
 // const userRoutes = require('./routes/users');
 
@@ -49,6 +51,8 @@ app.use('/api/' + process.env.API_VERSION + '/admin/scoring-patterns', adminScor
 app.use('/api/' + process.env.API_VERSION + '/admin/results', adminResultRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/result-components', adminResultComponentRoutes);
 app.use('/api/' + process.env.API_VERSION + '/files', fileServingRoutes);
+app.use('/api/' + process.env.API_VERSION + '/test-attempts', testAttemptRoutes);
+app.use('/api/' + process.env.API_VERSION + '/user-tests', userTestRoutes);
 
 // app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
 // app.use('/api/' + process.env.API_VERSION + '/users', userRoutes);
@@ -60,6 +64,87 @@ app.get('/health', (req, res) => {
         message: 'Server is running',
         timestamp: new Date().toISOString()
     });
+});
+
+// Debug endpoint to test full test-attempt flow without auth
+app.get('/debug/test-attempt/:sessionToken', async (req, res) => {
+    try {
+        const { sessionToken } = req.params;
+        const testAttemptService = require('./services/testAttemptService');
+
+        console.log('🐛 Debug: Testing test attempt flow for session:', sessionToken);
+
+        // Try to get test questions using the service
+        const result = await testAttemptService.getTestQuestions(sessionToken);
+        console.log('🐛 Debug: Service result:', result.success ? 'SUCCESS' : 'FAILED');
+        if (!result.success) {
+            console.log('🐛 Debug: Error:', result.message);
+        }
+
+        res.json(result);
+
+    } catch (error) {
+        console.error('🐛 Debug test attempt error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug endpoint to test questions without auth
+app.get('/debug/test-questions/:testId', async (req, res) => {
+    try {
+        const { testId } = req.params;
+        const SectionModel = require('./models/Section');
+        const QuestionModel = require('./models/Questions');
+
+        console.log('🐛 Debug: Testing questions for testId:', testId);
+
+        // Get sections for this test
+        const sections = await SectionModel.getSectionsByTestId(testId);
+        console.log('🐛 Debug: Found sections:', sections.length);
+
+        // Get questions for each section
+        let allQuestions = [];
+        for (const section of sections) {
+            const sectionQuestions = await QuestionModel.getQuestionsBySection(section.id);
+            console.log(`🐛 Debug: Section ${section.section_name} has ${sectionQuestions.length} questions`);
+
+            // Extract answer options from section config
+            let answerOptions = ['Option A', 'Option B', 'Option C', 'Option D'];
+            if (section.custom_scoring_config) {
+                try {
+                    const config = typeof section.custom_scoring_config === 'string'
+                        ? JSON.parse(section.custom_scoring_config)
+                        : section.custom_scoring_config;
+                    if (config.section_options && Array.isArray(config.section_options)) {
+                        answerOptions = config.section_options.map(opt => opt.text || opt);
+                    }
+                } catch (error) {
+                    console.error('Error parsing section options:', error);
+                }
+            }
+
+            allQuestions = allQuestions.concat(sectionQuestions.map(q => ({
+                id: q.id,
+                text: q.question_text,
+                section_name: section.section_name,
+                section_id: section.id,
+                answer_options: answerOptions
+            })));
+        }
+
+        res.json({
+            success: true,
+            testId,
+            sectionsCount: sections.length,
+            questionsCount: allQuestions.length,
+            sections: sections.map(s => ({ id: s.id, name: s.section_name })),
+            questions: allQuestions.slice(0, 3) // First 3 questions for testing
+        });
+
+    } catch (error) {
+        console.error('🐛 Debug endpoint error:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 module.exports = app;
