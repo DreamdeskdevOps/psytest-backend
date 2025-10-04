@@ -12,6 +12,11 @@ router.use((req, res, next) => {
 // In-memory storage for custom option types (in production, this would be a database)
 let customOptionTypes = [];
 
+// Clear any existing conflicting option types on server restart
+customOptionTypes = customOptionTypes.filter(type =>
+  !['yes_no', 'multiple_choice', 'likert_scale', 'true_false', 'rating_scale', 'frequency_scale'].includes(type.id)
+);
+
 // System option types (hardcoded)
 const systemOptionTypes = [
       {
@@ -97,13 +102,49 @@ const systemOptionTypes = [
 // Option Types CRUD Controllers
 const getAllOptionTypes = async (req, res) => {
   try {
-    // Combine system types and custom types
-    const allOptionTypes = [...systemOptionTypes, ...customOptionTypes];
+    const { getMany } = require('../../config/database');
+
+    // Get all option types from database
+    const dbOptionTypes = await getMany(`
+      SELECT
+        id,
+        name,
+        description,
+        pattern_type,
+        options,
+        is_system_pattern,
+        is_active,
+        created_at,
+        created_by
+      FROM answer_patterns
+      WHERE is_active = true
+      ORDER BY is_system_pattern DESC, created_at DESC
+    `);
+
+    console.log('📋 Raw DB option types:', JSON.stringify(dbOptionTypes, null, 2));
+
+    const formattedOptionTypes = dbOptionTypes.map(opt => ({
+      id: opt.id,
+      typeName: opt.name || 'Unnamed Type',
+      displayName: opt.name || 'Unnamed Type',
+      description: opt.description || '',
+      defaultOptions: opt.options || [], // This is JSONB from database
+      minOptions: 2,
+      maxOptions: 10,
+      allowsCorrectAnswer: false,
+      useCases: [],
+      isSystemType: opt.is_system_pattern || false,
+      isActive: opt.is_active,
+      createdAt: opt.created_at,
+      createdBy: opt.created_by
+    }));
+
+    console.log('✅ Formatted option types:', JSON.stringify(formattedOptionTypes, null, 2));
 
     return res.status(200).json({
       success: true,
       message: 'Option types retrieved successfully',
-      data: allOptionTypes
+      data: formattedOptionTypes
     });
 
   } catch (error) {
@@ -138,13 +179,54 @@ const createOptionType = async (req, res) => {
       });
     }
 
-    // Create new option type object
+    const { insertOne, getOne } = require('../../config/database');
+
+    // Check if name already exists in database
+    const existingType = await getOne(`
+      SELECT id FROM answer_patterns WHERE name = $1
+    `, [typeName]);
+
+    if (existingType) {
+      return res.status(400).json({
+        success: false,
+        message: `Option type with name "${typeName}" already exists. Please use a different name.`,
+        data: null
+      });
+    }
+
+    console.log('📝 Creating option type with name:', typeName);
+    console.log('📝 Options to store:', defaultOptions);
+
+    // Insert into database
+    const newOptionTypeId = await insertOne(`
+      INSERT INTO answer_patterns (
+        name,
+        description,
+        pattern_type,
+        options,
+        is_system_pattern,
+        is_active,
+        created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id
+    `, [
+      typeName,
+      description || '',
+      'CUSTOM',
+      JSON.stringify(defaultOptions), // Store complete option objects with {id, text, value, isCorrect}
+      false,
+      true,
+      adminId
+    ]);
+
+    console.log('✅ Created option type with ID:', newOptionTypeId);
+
     const newOptionType = {
-      id: typeName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-      typeName: typeName.toUpperCase(),
-      displayName,
+      id: newOptionTypeId,
+      typeName: typeName,
+      displayName: displayName || typeName,
       description: description || '',
-      defaultOptions,
+      defaultOptions, // Complete option objects from request
       minOptions: minOptions || 2,
       maxOptions: maxOptions || 10,
       allowsCorrectAnswer: Boolean(allowsCorrectAnswer),
@@ -154,9 +236,6 @@ const createOptionType = async (req, res) => {
       createdAt: new Date(),
       createdBy: adminId
     };
-
-    // Store the new option type in memory
-    customOptionTypes.push(newOptionType);
 
     return res.status(201).json({
       success: true,
@@ -180,18 +259,14 @@ const updateOptionType = async (req, res) => {
     const { displayName, description, defaultOptions, minOptions, maxOptions, allowsCorrectAnswer, useCases } = req.body;
     const adminId = req.admin.id;
 
-    // Check if it's a system type (cannot be updated)
-    if (['yes_no', 'multiple_choice', 'likert_scale', 'true_false', 'rating_scale', 'frequency_scale'].includes(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'System option types cannot be modified',
-        data: null
-      });
-    }
+    const { executeQuery, getOne } = require('../../config/database');
 
-    // Find the custom option type to update
-    const optionTypeIndex = customOptionTypes.findIndex(type => type.id === id);
-    if (optionTypeIndex === -1) {
+    // Check if option type exists in database
+    const existingType = await getOne(`
+      SELECT * FROM answer_patterns WHERE id = $1
+    `, [id]);
+
+    if (!existingType) {
       return res.status(404).json({
         success: false,
         message: 'Option type not found',
@@ -199,23 +274,38 @@ const updateOptionType = async (req, res) => {
       });
     }
 
-    // Update the option type
-    const existingType = customOptionTypes[optionTypeIndex];
+    // Check if it's a system type (cannot be updated)
+    if (existingType.is_system_pattern) {
+      return res.status(400).json({
+        success: false,
+        message: 'System option types cannot be modified',
+        data: null
+      });
+    }
+
+    // Update in database
+    await executeQuery(`
+      UPDATE answer_patterns
+      SET
+        description = COALESCE($1, description),
+        options = COALESCE($2, options),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+    `, [
+      description,
+      defaultOptions ? JSON.stringify(defaultOptions) : null,
+      id
+    ]);
+
     const updatedOptionType = {
-      ...existingType,
-      displayName: displayName || existingType.displayName,
+      id: id,
+      typeName: existingType.name,
+      displayName: displayName || existingType.name,
       description: description || existingType.description,
-      defaultOptions: defaultOptions || existingType.defaultOptions,
-      minOptions: minOptions || existingType.minOptions,
-      maxOptions: maxOptions || existingType.maxOptions,
-      allowsCorrectAnswer: allowsCorrectAnswer !== undefined ? Boolean(allowsCorrectAnswer) : existingType.allowsCorrectAnswer,
-      useCases: useCases || existingType.useCases,
+      defaultOptions: defaultOptions || existingType.options,
       updatedAt: new Date(),
       updatedBy: adminId
     };
-
-    // Replace in the array
-    customOptionTypes[optionTypeIndex] = updatedOptionType;
 
     return res.status(200).json({
       success: true,
@@ -238,18 +328,14 @@ const deleteOptionType = async (req, res) => {
     const { id } = req.params;
     const adminId = req.admin.id;
 
-    // Check if it's a system type (cannot be deleted)
-    if (['yes_no', 'multiple_choice', 'likert_scale', 'true_false', 'rating_scale', 'frequency_scale'].includes(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'System option types cannot be deleted',
-        data: null
-      });
-    }
+    const { executeQuery, getOne } = require('../../config/database');
 
-    // Find and remove the custom option type
-    const optionTypeIndex = customOptionTypes.findIndex(type => type.id === id);
-    if (optionTypeIndex === -1) {
+    // Check if option type exists
+    const existingType = await getOne(`
+      SELECT * FROM answer_patterns WHERE id = $1
+    `, [id]);
+
+    if (!existingType) {
       return res.status(404).json({
         success: false,
         message: 'Option type not found',
@@ -257,8 +343,21 @@ const deleteOptionType = async (req, res) => {
       });
     }
 
-    // Remove from array
-    customOptionTypes.splice(optionTypeIndex, 1);
+    // Check if it's a system type (cannot be deleted)
+    if (existingType.is_system_pattern) {
+      return res.status(400).json({
+        success: false,
+        message: 'System option types cannot be deleted',
+        data: null
+      });
+    }
+
+    // Soft delete by setting is_active to false
+    await executeQuery(`
+      UPDATE answer_patterns
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [id]);
 
     return res.status(200).json({
       success: true,

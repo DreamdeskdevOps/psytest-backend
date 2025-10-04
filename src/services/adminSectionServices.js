@@ -495,22 +495,20 @@ const getSectionOptions = async (sectionId, adminId) => {
       }
     }
 
-    // If no section options found, try to get from answer template
+    // If no section options found, try to get from answer template (answer_patterns table)
     if (options.length === 0) {
       const { getOne } = require('../config/database');
       const templateQuery = `
-        SELECT pattern_name, display_name, configuration
+        SELECT name, options
         FROM answer_patterns
-        WHERE pattern_name = $1 OR id = $1
+        WHERE name = $1 OR id = $1
       `;
 
       try {
         const template = await getOne(templateQuery, [section.answer_pattern]);
-        if (template && template.configuration) {
-          const config = typeof template.configuration === 'string'
-            ? JSON.parse(template.configuration)
-            : template.configuration;
-          options = config.options || [];
+        if (template && template.options) {
+          // Options are stored as JSONB - already parsed by pg library
+          options = Array.isArray(template.options) ? template.options : [];
           console.log('📋 Found options from answer template:', options);
         }
       } catch (error) {

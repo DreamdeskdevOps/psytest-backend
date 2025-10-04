@@ -143,7 +143,8 @@ const getTestQuestions = async (sessionToken) => {
     const responseData = {
       questions: allQuestions.map(q => {
         // Extract answer options from section's custom_scoring_config
-        let answerOptions = ['Option A', 'Option B', 'Option C', 'Option D']; // fallback
+        // All options come from the section configuration - no hardcoded defaults
+        let answerOptions = [];
 
         // Find the section for this question
         const questionSection = sections.find(s => s.id === q.section_id);
@@ -154,7 +155,8 @@ const getTestQuestions = async (sessionToken) => {
               : questionSection.custom_scoring_config;
 
             if (config.section_options && Array.isArray(config.section_options)) {
-              answerOptions = config.section_options.map(opt => opt.text || opt);
+              // Return complete option objects with all properties (id, text, value, isCorrect)
+              answerOptions = config.section_options;
             }
           } catch (error) {
             console.error('Error parsing section options:', error);
@@ -368,11 +370,19 @@ const calculateSectionSpecificScore = async (answers, questions, sectionConfigs,
                 ? JSON.parse(sectionConfig.custom_scoring_config)
                 : sectionConfig.custom_scoring_config;
 
+              console.log(`   🔍 Question ${question.id} - Flag: ${flag}, Answer: ${selectedAnswer}`);
+
               if (config && config.section_options && Array.isArray(config.section_options)) {
+                console.log(`   📋 Available options:`, config.section_options.map(o => `${o.text}=${o.value}`).join(', '));
                 const option = config.section_options.find(opt => opt.value == selectedAnswer);
                 optionValue = option ? (option.value || 0) : 0;
+                console.log(`   ✅ Matched option value: ${optionValue}`);
+              } else {
+                console.log(`   ⚠️ No section_options in config, using answer as value`);
+                optionValue = parseInt(selectedAnswer) || 0;
               }
             } else {
+              console.log(`   ⚠️ No custom_scoring_config, using answer as value`);
               optionValue = parseInt(selectedAnswer) || 0;
             }
           } catch (error) {
@@ -383,6 +393,7 @@ const calculateSectionSpecificScore = async (answers, questions, sectionConfigs,
           // Add to section flag score
           if (!sectionFlagScores[flag]) sectionFlagScores[flag] = 0;
           sectionFlagScores[flag] += optionValue;
+          console.log(`   🎯 ${flag} score is now: ${sectionFlagScores[flag]}`);
         }
       }
 
@@ -670,12 +681,12 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
       const question = questions.find(q => q.id === questionId);
       if (!question) continue;
 
-      // For range-based scoring, use the selected answer value directly
+      // For range-based scoring, get the actual configured option value from database
       let optionValue = parseInt(selectedAnswer) || 0;
+      let optionText = 'Unknown';
 
-      // Try to get actual option value from section config if available
+      // Get the section configuration for this question
       try {
-        // Get the section configuration for this question
         const sectionConfig = await getMany(`
           SELECT ts.custom_scoring_config, ts.section_name
           FROM test_sections ts
@@ -687,13 +698,46 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
             ? JSON.parse(sectionConfig[0].custom_scoring_config)
             : sectionConfig[0].custom_scoring_config;
 
+          console.log(`🔧 Section config for ${question.section_name}:`, JSON.stringify(config.section_options, null, 2));
+
           if (config.section_options && Array.isArray(config.section_options)) {
-            const option = config.section_options.find(opt => opt.value == selectedAnswer);
-            optionValue = option ? (option.value || 0) : optionValue;
+            // Find option by matching the selectedAnswer (could be option ID or value)
+            let matchingOption = null;
+
+            // First try to match by option ID (for frontend selections)
+            matchingOption = config.section_options.find(opt => opt.id == selectedAnswer);
+
+            // If not found, try to match by value (for direct value selections)
+            if (!matchingOption) {
+              matchingOption = config.section_options.find(opt => opt.value == selectedAnswer);
+            }
+
+            // If still not found, try to match by index (0-based to 1-based conversion)
+            if (!matchingOption) {
+              const answerIndex = parseInt(selectedAnswer) - 1;
+              if (answerIndex >= 0 && answerIndex < config.section_options.length) {
+                matchingOption = config.section_options[answerIndex];
+              }
+            }
+
+            if (matchingOption) {
+              optionValue = matchingOption.value || 0;
+              optionText = matchingOption.text || 'Unknown';
+              console.log(`✅ Found matching option: "${optionText}" = ${optionValue}`);
+            } else {
+              console.log(`⚠️ No matching option found for answer "${selectedAnswer}". Available options:`,
+                config.section_options.map(opt => `${opt.id}:"${opt.text}"=${opt.value}`));
+              // Use raw selected answer as fallback
+              optionValue = parseInt(selectedAnswer) || 0;
+            }
+          } else {
+            console.log('⚠️ No section_options found in config, using raw answer value');
           }
+        } else {
+          console.log('⚠️ No custom_scoring_config found, using raw answer value');
         }
       } catch (error) {
-        console.log('⚠️ Could not parse section config, using raw answer value:', error.message);
+        console.log('⚠️ Error reading section config:', error.message);
         // Use the raw answer value as fallback
       }
 
@@ -720,7 +764,7 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
         value: optionValue
       });
 
-      console.log(`📝 Q${questionCount}: Section="${sectionName}" | Answer=${selectedAnswer} | Value=${optionValue}`);
+      console.log(`📝 Q${questionCount}: Section="${sectionName}" | Answer=${selectedAnswer} | Option="${optionText}" | Value=${optionValue}`);
     }
 
     console.log('\n📊 SECTION BREAKDOWN:');
@@ -744,10 +788,13 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
     console.log('📊 Overall average score per question:', averageScore.toFixed(2));
 
     // Find matching range in test_results table based on average score
+    // Order by the minimum score in range to ensure correct matching order
     const ranges = await getMany(`
-      SELECT * FROM test_results
+      SELECT *,
+        CAST(SPLIT_PART(score_range, '-', 1) AS INTEGER) as min_score
+      FROM test_results
       WHERE test_id = $1 AND result_type = 'range_based' AND is_active = true
-      ORDER BY score_range
+      ORDER BY min_score ASC
     `, [testId]);
 
     console.log('\n🎯 RANGE MATCHING PROCESS:');
@@ -757,24 +804,46 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
     console.log('');
 
     let matchingResult = null;
-    console.log(`🎯 Trying to match average score ${averageScore.toFixed(2)} with ranges:`);
 
+    // First, try to match with TOTAL SCORE (for ranges like 1-10, 11-20)
+    console.log(`🎯 Trying to match TOTAL score ${totalScore} with ranges:`);
     for (const range of ranges) {
       if (range.score_range) {
-        // Parse range format like "1-2", "3-4", "5-6", etc.
         const [min, max] = range.score_range.split('-').map(n => parseInt(n));
-        const isMatch = averageScore >= min && averageScore <= max;
+        const isMatchTotal = totalScore >= min && totalScore <= max;
 
-        console.log(`🔍 Range "${range.result_code}" (${min}-${max}): ${averageScore.toFixed(2)} >= ${min} && ${averageScore.toFixed(2)} <= ${max} = ${isMatch ? '✅ MATCH' : '❌ No match'}`);
+        console.log(`🔍 Range "${range.result_code}" (${min}-${max}): ${totalScore} >= ${min} && ${totalScore} <= ${max} = ${isMatchTotal ? '✅ MATCH' : '❌ No match'}`);
 
-        // Check if average score falls within this range
-        if (isMatch) {
+        if (isMatchTotal) {
           matchingResult = range;
-          console.log(`\n🎉 FINAL MATCH FOUND!`);
+          console.log(`\n🎉 MATCH FOUND WITH TOTAL SCORE!`);
           console.log(`🏆 Result Code: "${range.result_code}"`);
           console.log(`📊 Score Range: ${range.score_range}`);
-          console.log(`🎯 Your Average: ${averageScore.toFixed(2)}`);
+          console.log(`🎯 Your Total Score: ${totalScore}`);
           break;
+        }
+      }
+    }
+
+    // If no match with total score, try with AVERAGE SCORE
+    if (!matchingResult) {
+      console.log(`\n🎯 No match with total score, trying AVERAGE score ${averageScore.toFixed(2)}:`);
+
+      for (const range of ranges) {
+        if (range.score_range) {
+          const [min, max] = range.score_range.split('-').map(n => parseFloat(n));
+          const isMatchAvg = averageScore >= min && averageScore <= max;
+
+          console.log(`🔍 Range "${range.result_code}" (${min}-${max}): ${averageScore.toFixed(2)} >= ${min} && ${averageScore.toFixed(2)} <= ${max} = ${isMatchAvg ? '✅ MATCH' : '❌ No match'}`);
+
+          if (isMatchAvg) {
+            matchingResult = range;
+            console.log(`\n🎉 MATCH FOUND WITH AVERAGE SCORE!`);
+            console.log(`🏆 Result Code: "${range.result_code}"`);
+            console.log(`📊 Score Range: ${range.score_range}`);
+            console.log(`🎯 Your Average: ${averageScore.toFixed(2)}`);
+            break;
+          }
         }
       }
     }
@@ -1116,62 +1185,70 @@ const getAllCompletedTestAttempts = async () => {
         let resultDescription = 'Your psychometric assessment has been completed successfully.';
         let pdfFile = null;
 
-        // Try to generate a meaningful result code from section scores
-        if (Object.keys(sectionScores).length > 0) {
-          const topScores = Object.entries(sectionScores)
-            .sort(([,a], [,b]) => (b.score || 0) - (a.score || 0))
-            .slice(0, 4); // Get top 4 sections for MBTI-style codes
-
-          if (topScores.length >= 4) {
-            // Generate MBTI-style result code from top sections
-            resultCode = topScores.map(([,section]) => {
-              const name = section.name || 'X';
-              if (name.toLowerCase().includes('extrav')) return 'E';
-              if (name.toLowerCase().includes('introver')) return 'I';
-              if (name.toLowerCase().includes('intui')) return 'N';
-              if (name.toLowerCase().includes('sens')) return 'S';
-              if (name.toLowerCase().includes('feel')) return 'F';
-              if (name.toLowerCase().includes('think')) return 'T';
-              if (name.toLowerCase().includes('percep')) return 'P';
-              if (name.toLowerCase().includes('judg')) return 'J';
-              return name.charAt(0).toUpperCase();
-            }).join('');
+        // Check if section_scores contains the full result data (for flag-based tests like MBTI)
+        if (sectionScores.resultCode) {
+          // This is a flag-based test - extract the result data directly
+          resultCode = sectionScores.resultCode;
+          resultTitle = sectionScores.resultTitle || resultTitle;
+          resultDescription = sectionScores.resultDescription || resultDescription;
+          pdfFile = sectionScores.pdfFile || null;
+          console.log(`📋 Extracted flag-based result from section_scores: ${resultCode}`);
+        } else if (sectionScores.sectionResults && Array.isArray(sectionScores.sectionResults)) {
+          // Alternative: extract from sectionResults array
+          const sectionFlags = sectionScores.sectionResults.map(s => s.resultCode || s.resultFlags?.[0] || '').join('');
+          if (sectionFlags.length >= 4) {
+            resultCode = sectionFlags;
+            console.log(`📋 Generated flag-based result from sectionResults: ${resultCode}`);
           }
         }
 
         // Try to match with admin-configured results
         try {
-          const adminResult = await getMany(`
-            SELECT * FROM test_results
-            WHERE test_id = $1 AND result_code = $2 AND is_active = true
-            LIMIT 1
-          `, [attempt.test_id, resultCode]);
+          // Check if this test has range-based results
+          const rangeResults = await getMany(`
+            SELECT *, CAST(SPLIT_PART(score_range, '-', 1) AS INTEGER) as min_score
+            FROM test_results
+            WHERE test_id = $1 AND result_type = 'range_based' AND is_active = true
+            ORDER BY min_score ASC
+          `, [attempt.test_id]);
 
-          if (adminResult.length > 0) {
-            const result = adminResult[0];
-            console.log('✅ Found matching admin result for code:', resultCode);
+          let matchedResult = null;
 
-            resultTitle = result.title || resultTitle;
-            resultDescription = result.description || resultDescription;
-            pdfFile = result.pdf_file;
-          } else {
-            // If no exact match, try to find any admin result for this test
-            const anyResult = await getMany(`
-              SELECT * FROM test_results
-              WHERE test_id = $1 AND is_active = true
-              ORDER BY created_at DESC
-              LIMIT 1
-            `, [attempt.test_id]);
+          if (rangeResults.length > 0) {
+            // This is a range-based test - match by score
+            const totalScore = parseFloat(attempt.total_score) || 0;
 
-            if (anyResult.length > 0) {
-              const result = anyResult[0];
-              console.log('⚠️ Using fallback admin result:', result.result_code);
-
-              resultCode = result.result_code;
-              resultTitle = result.title || resultTitle;
-              resultDescription = result.description || resultDescription;
-              pdfFile = result.pdf_file;
+            for (const range of rangeResults) {
+              if (range.score_range) {
+                const [min, max] = range.score_range.split('-').map(n => parseInt(n));
+                if (totalScore >= min && totalScore <= max) {
+                  matchedResult = range;
+                  console.log(`✅ Matched score ${totalScore} with range ${range.score_range}: ${range.result_code}`);
+                  break;
+                }
+              }
             }
+          } else {
+            // Try flag-based matching by code
+            const flagResult = await getMany(`
+              SELECT * FROM test_results
+              WHERE test_id = $1 AND result_code = $2 AND is_active = true
+              LIMIT 1
+            `, [attempt.test_id, resultCode]);
+
+            if (flagResult.length > 0) {
+              matchedResult = flagResult[0];
+              console.log('✅ Found matching admin result for code:', resultCode);
+            }
+          }
+
+          if (matchedResult) {
+            resultCode = matchedResult.result_code;
+            resultTitle = matchedResult.title || resultTitle;
+            resultDescription = matchedResult.description || resultDescription;
+            pdfFile = matchedResult.pdf_file;
+          } else {
+            console.log('⚠️ No matching result found for this attempt');
           }
         } catch (adminError) {
           console.log('⚠️ Could not fetch admin results:', adminError.message);
@@ -1191,7 +1268,7 @@ const getAllCompletedTestAttempts = async () => {
           result_description: resultDescription,
           pdf_file: pdfFile,
           section_results: sectionScores,
-          session_token: attempt.id, // Use ID as session token since session_token column doesn't exist
+          session_token: attempt.id,
           percentage: parseFloat(attempt.percentage) || 0,
           user_id: attempt.user_id,
           test_id: attempt.test_id
