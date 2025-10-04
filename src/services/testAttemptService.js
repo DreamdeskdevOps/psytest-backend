@@ -342,6 +342,25 @@ const calculateSectionSpecificScore = async (answers, questions, sectionConfigs,
     const { getMany } = require('../config/database');
     console.log('🏗️ Processing section-specific scoring configurations');
 
+    // CHECK: If ANY section has flagCount > 1, use Top N flag scoring globally
+    for (const sectionConfig of sectionConfigs) {
+      if (sectionConfig.scoring_pattern) {
+        const pattern = typeof sectionConfig.scoring_pattern === 'string'
+          ? JSON.parse(sectionConfig.scoring_pattern)
+          : sectionConfig.scoring_pattern;
+
+        const flagCount = parseInt(pattern.flagCount) || 1;
+
+        if (flagCount > 1) {
+          console.log(`🎯 Detected Top ${flagCount} flag scoring pattern in section: ${sectionConfig.section_name}`);
+          console.log('🔄 Switching to global Top N flag-based scoring...');
+
+          // Use the Top N flag scoring function instead
+          return await calculateTopNFlagScore(answers, questions, sectionConfig, testId, flagCount);
+        }
+      }
+    }
+
     const sectionResults = [];
     let finalResultCode = '';
 
@@ -791,7 +810,7 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
     // Order by the minimum score in range to ensure correct matching order
     const ranges = await getMany(`
       SELECT *,
-        CAST(SPLIT_PART(score_range, '-', 1) AS INTEGER) as min_score
+        CAST(SPLIT_PART(score_range, '-', 1) AS DECIMAL) as min_score
       FROM test_results
       WHERE test_id = $1 AND result_type = 'range_based' AND is_active = true
       ORDER BY min_score ASC
@@ -881,6 +900,205 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
 
   } catch (error) {
     console.error('❌ Range-based calculation error:', error);
+    throw error;
+  }
+};
+
+// Calculate Top N flag-based scores (for scoring patterns like top_2, top_3, top_4)
+const calculateTopNFlagScore = async (answers, questions, sectionConfig, testId, flagCount) => {
+  try {
+    const { getMany } = require('../config/database');
+    console.log('🎯 =============================================');
+    console.log('🎯 TOP N FLAG-BASED SCORING');
+    console.log('🎯 =============================================');
+    console.log('📊 Test ID:', testId);
+    console.log('🔢 Flag Count (Top N):', flagCount);
+    console.log('📝 Total questions answered:', Object.keys(answers).length);
+
+    // Calculate scores for ALL flags across the test
+    const globalFlagScores = {};
+
+    console.log('\n📋 CALCULATING FLAG SCORES:');
+    console.log('─────────────────────────────────────────────');
+
+    // Process all questions and accumulate flag scores
+    for (const question of questions) {
+      if (answers[question.id] && question.question_flag) {
+        const flag = question.question_flag;
+        const selectedAnswer = answers[question.id];
+
+        // Get option value from section's custom_scoring_config
+        let optionValue = 0;
+        try {
+          // Get section config for this question
+          const sectionConfigData = await getMany(`
+            SELECT ts.custom_scoring_config
+            FROM test_sections ts
+            WHERE ts.id = $1
+          `, [question.section_id]);
+
+          if (sectionConfigData.length > 0 && sectionConfigData[0].custom_scoring_config) {
+            const config = typeof sectionConfigData[0].custom_scoring_config === 'string'
+              ? JSON.parse(sectionConfigData[0].custom_scoring_config)
+              : sectionConfigData[0].custom_scoring_config;
+
+            if (config && config.section_options && Array.isArray(config.section_options)) {
+              // Try to find matching option
+              let matchingOption = config.section_options.find(opt => opt.value == selectedAnswer);
+              if (!matchingOption) {
+                matchingOption = config.section_options.find(opt => opt.id == selectedAnswer);
+              }
+
+              if (matchingOption) {
+                optionValue = matchingOption.value || 0;
+              } else {
+                optionValue = parseInt(selectedAnswer) || 0;
+              }
+            } else {
+              optionValue = parseInt(selectedAnswer) || 0;
+            }
+          } else {
+            optionValue = parseInt(selectedAnswer) || 0;
+          }
+        } catch (error) {
+          console.error('⚠️ Error parsing section config:', error.message);
+          optionValue = parseInt(selectedAnswer) || 0;
+        }
+
+        // Accumulate flag score globally
+        if (!globalFlagScores[flag]) {
+          globalFlagScores[flag] = 0;
+        }
+        globalFlagScores[flag] += optionValue;
+
+        console.log(`📝 Question Flag: ${flag} | Answer: ${selectedAnswer} | Value: ${optionValue}`);
+      }
+    }
+
+    console.log('\n📊 GLOBAL FLAG SCORES:');
+    console.log('─────────────────────────────────────────────');
+    Object.entries(globalFlagScores).forEach(([flag, score]) => {
+      console.log(`🏷️ Flag ${flag}: ${score} points`);
+    });
+
+    // Sort flags by score (descending) and take top N
+    const sortedFlags = Object.entries(globalFlagScores)
+      .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
+      .slice(0, flagCount);
+
+    console.log('\n🏆 TOP', flagCount, 'FLAGS:');
+    console.log('─────────────────────────────────────────────');
+    sortedFlags.forEach(([flag, score], index) => {
+      console.log(`${index + 1}. Flag ${flag}: ${score} points`);
+    });
+
+    // Now fetch result components for each top flag with their scores
+    const resultComponents = [];
+    let combinedDescription = '';
+    let combinedTitle = '';
+
+    for (const [flag, score] of sortedFlags) {
+      console.log(`\n🔍 Looking up result for Flag ${flag} with score ${score}`);
+
+      // Try to find exact score match in result_components
+      const component = await getMany(`
+        SELECT * FROM result_components
+        WHERE test_id = $1
+        AND component_code = $2
+        AND score_value = $3
+        AND is_active = true
+        LIMIT 1
+      `, [testId, flag, score]);
+
+      if (component.length > 0) {
+        console.log(`✅ Found component: ${component[0].component_name}`);
+        resultComponents.push({
+          flag,
+          score,
+          componentName: component[0].component_name,
+          description: component[0].description
+        });
+
+        // Combine descriptions
+        if (combinedTitle) {
+          combinedTitle += ', ' + component[0].component_name;
+        } else {
+          combinedTitle = component[0].component_name;
+        }
+
+        if (combinedDescription) {
+          combinedDescription += '\n\n' + component[0].description;
+        } else {
+          combinedDescription = component[0].description;
+        }
+      } else {
+        console.log(`⚠️ No component found for Flag ${flag} with score ${score}`);
+        // Try to find without exact score (fallback)
+        const fallbackComponent = await getMany(`
+          SELECT * FROM result_components
+          WHERE test_id = $1
+          AND component_code = $2
+          AND is_active = true
+          ORDER BY score_value DESC
+          LIMIT 1
+        `, [testId, flag]);
+
+        if (fallbackComponent.length > 0) {
+          console.log(`⚠️ Using fallback component: ${fallbackComponent[0].component_name}`);
+          resultComponents.push({
+            flag,
+            score,
+            componentName: fallbackComponent[0].component_name,
+            description: fallbackComponent[0].description
+          });
+
+          if (combinedTitle) {
+            combinedTitle += ', ' + fallbackComponent[0].component_name;
+          } else {
+            combinedTitle = fallbackComponent[0].component_name;
+          }
+
+          if (combinedDescription) {
+            combinedDescription += '\n\n' + fallbackComponent[0].description;
+          } else {
+            combinedDescription = fallbackComponent[0].description;
+          }
+        }
+      }
+    }
+
+    console.log('\n📄 COMBINED RESULT:');
+    console.log('─────────────────────────────────────────────');
+    console.log('📋 Title:', combinedTitle);
+    console.log('📝 Description length:', combinedDescription.length, 'characters');
+
+    // Generate result code from top flags
+    const resultCode = sortedFlags.map(([flag]) => flag).join('');
+    console.log('🔑 Result Code:', resultCode);
+
+    const totalScore = sortedFlags.reduce((sum, [, score]) => sum + score, 0);
+
+    return {
+      scoringType: 'top_n_flag_based',
+      flagCount: flagCount,
+      globalFlagScores,
+      topFlags: sortedFlags.map(([flag, score]) => ({ flag, score })),
+      resultCode,
+      resultComponents,
+      totalScore,
+      questionCount: Object.keys(answers).length,
+      resultTitle: combinedTitle,
+      resultDescription: combinedDescription,
+      pdfFile: null, // Top N results don't have a single PDF
+      testResult: {
+        result_code: resultCode,
+        title: combinedTitle,
+        description: combinedDescription
+      }
+    };
+
+  } catch (error) {
+    console.error('❌ Top N flag calculation error:', error);
     throw error;
   }
 };
@@ -1001,6 +1219,26 @@ const submitTestAttempt = async (sessionToken) => {
         resultData.pdfFile = scoreResult.testResult.pdf_file;
       }
 
+    } else if (scoreResult.scoringType === 'top_n_flag_based') {
+      resultData = {
+        scoringType: 'top_n_flag_based',
+        flagCount: scoreResult.flagCount,
+        globalFlagScores: scoreResult.globalFlagScores,
+        topFlags: scoreResult.topFlags,
+        resultCode: scoreResult.resultCode,
+        resultComponents: scoreResult.resultComponents,
+        totalScore: scoreResult.totalScore,
+        questionCount: scoreResult.questionCount,
+        testResult: scoreResult.testResult
+      };
+
+      // For Top N flag-based, use combined result info
+      if (scoreResult.testResult) {
+        resultData.resultTitle = scoreResult.testResult.title;
+        resultData.resultDescription = scoreResult.testResult.description;
+        resultData.resultCode = scoreResult.testResult.result_code;
+      }
+
     } else if (scoreResult.scoringType === 'range_based') {
       resultData = {
         scoringType: 'range_based',
@@ -1012,6 +1250,7 @@ const submitTestAttempt = async (sessionToken) => {
 
       // For range-based, use result info if available
       if (scoreResult.testResult) {
+        resultData.resultCode = scoreResult.testResult.result_code;
         resultData.resultTitle = scoreResult.testResult.title;
         resultData.resultDescription = scoreResult.testResult.description;
         resultData.pdfFile = scoreResult.testResult.pdf_file;
@@ -1185,9 +1424,16 @@ const getAllCompletedTestAttempts = async () => {
         let resultDescription = 'Your psychometric assessment has been completed successfully.';
         let pdfFile = null;
 
-        // Check if section_scores contains the full result data (for flag-based tests like MBTI)
-        if (sectionScores.resultCode) {
-          // This is a flag-based test - extract the result data directly
+        // Check scoring type and extract result data accordingly
+        if (sectionScores.scoringType === 'top_n_flag_based') {
+          // This is a Top N flag-based test - use combined result
+          resultCode = sectionScores.resultCode || resultCode;
+          resultTitle = sectionScores.resultTitle || resultTitle;
+          resultDescription = sectionScores.resultDescription || resultDescription;
+          pdfFile = sectionScores.pdfFile || null;
+          console.log(`📋 Extracted Top N flag-based result: ${resultCode} (${sectionScores.flagCount} flags)`);
+        } else if (sectionScores.resultCode) {
+          // This is a standard flag-based test - extract the result data directly
           resultCode = sectionScores.resultCode;
           resultTitle = sectionScores.resultTitle || resultTitle;
           resultDescription = sectionScores.resultDescription || resultDescription;
@@ -1206,7 +1452,7 @@ const getAllCompletedTestAttempts = async () => {
         try {
           // Check if this test has range-based results
           const rangeResults = await getMany(`
-            SELECT *, CAST(SPLIT_PART(score_range, '-', 1) AS INTEGER) as min_score
+            SELECT *, CAST(SPLIT_PART(score_range, '-', 1) AS DECIMAL) as min_score
             FROM test_results
             WHERE test_id = $1 AND result_type = 'range_based' AND is_active = true
             ORDER BY min_score ASC
@@ -1217,14 +1463,31 @@ const getAllCompletedTestAttempts = async () => {
           if (rangeResults.length > 0) {
             // This is a range-based test - match by score
             const totalScore = parseFloat(attempt.total_score) || 0;
+            const questionCount = sectionScores.questionCount || 1;
+            const averageScore = totalScore / questionCount;
 
+            // First try matching with total score
             for (const range of rangeResults) {
               if (range.score_range) {
-                const [min, max] = range.score_range.split('-').map(n => parseInt(n));
+                const [min, max] = range.score_range.split('-').map(n => parseFloat(n));
                 if (totalScore >= min && totalScore <= max) {
                   matchedResult = range;
-                  console.log(`✅ Matched score ${totalScore} with range ${range.score_range}: ${range.result_code}`);
+                  console.log(`✅ Matched total score ${totalScore} with range ${range.score_range}: ${range.result_code}`);
                   break;
+                }
+              }
+            }
+
+            // If no match with total score, try with average score (for decimal ranges)
+            if (!matchedResult) {
+              for (const range of rangeResults) {
+                if (range.score_range) {
+                  const [min, max] = range.score_range.split('-').map(n => parseFloat(n));
+                  if (averageScore >= min && averageScore <= max) {
+                    matchedResult = range;
+                    console.log(`✅ Matched average score ${averageScore.toFixed(2)} with range ${range.score_range}: ${range.result_code}`);
+                    break;
+                  }
                 }
               }
             }
