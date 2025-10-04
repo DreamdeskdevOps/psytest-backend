@@ -100,11 +100,12 @@ const createResultComponent = async (componentData, adminId) => {
       return generateResponse(false, 'Test not found', null, 404);
     }
 
-    // Check if component code already exists for this test
-    const existingComponent = await ResultComponentModel.getComponentByTestAndCode(
-      componentData.test_id,
-      componentData.component_code
-    );
+    // Check if component code AND score value combination already exists for this test
+    const db = require('../config/database');
+    const existingComponent = await db.getOne(`
+      SELECT * FROM result_components
+      WHERE test_id = $1 AND component_code = $2 AND score_value = $3
+    `, [componentData.test_id, componentData.component_code, componentData.score_value]);
 
     if (existingComponent) {
       // If component exists but is soft-deleted, reactivate it with new data
@@ -127,7 +128,7 @@ const createResultComponent = async (componentData, adminId) => {
       }
 
       // If component exists and is active, return conflict
-      return generateResponse(false, 'Component code already exists for this test', null, 409);
+      return generateResponse(false, 'A component with this code and score value already exists for this test', null, 409);
     }
 
     // If no priority specified, set to next available priority

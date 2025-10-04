@@ -770,6 +770,165 @@ const setSectionNumbering = async (req, res) => {
   }
 };
 
+// GET column mapping information for bulk import
+const getBulkImportColumnMapping = async (req, res) => {
+  try {
+    const columnMapping = {
+      required: [
+        {
+          excelColumn: 'question_text',
+          databaseColumn: 'question_text',
+          description: 'The question text content',
+          example: 'What is the capital of France?',
+          dataType: 'TEXT'
+        },
+        {
+          excelColumn: 'order_index',
+          databaseColumn: 'order_index',
+          description: 'Order/position of question in section (1, 2, 3...)',
+          example: '1',
+          dataType: 'INTEGER'
+        }
+      ],
+      optional: [
+        {
+          excelColumn: 'question_flag',
+          alternateColumn: 'flag',
+          databaseColumn: 'question_flag',
+          description: 'Flag code for scoring (e.g., I, E, N, S for MBTI)',
+          example: 'I',
+          dataType: 'TEXT',
+          default: ''
+        },
+        {
+          excelColumn: 'question_type',
+          databaseColumn: 'question_type',
+          description: 'Type of question',
+          example: 'MULTIPLE_CHOICE',
+          dataType: 'ENUM',
+          allowedValues: ['STANDARD', 'TEXT', 'IMAGE', 'MIXED', 'SCENARIO', 'IMAGE_BASED', 'AUDIO_BASED', 'VIDEO_BASED', 'MULTIPLE_CHOICE', 'SINGLE_CHOICE', 'TRUE_FALSE', 'SHORT_ANSWER', 'ESSAY', 'FILL_BLANK'],
+          default: 'MULTIPLE_CHOICE'
+        },
+        {
+          excelColumn: 'difficulty_level',
+          alternateColumn: 'difficulty',
+          databaseColumn: 'difficulty_level',
+          description: 'Difficulty level of question',
+          example: 'MEDIUM',
+          dataType: 'ENUM',
+          allowedValues: ['EASY', 'MEDIUM', 'HARD', 'EXPERT'],
+          default: 'MEDIUM'
+        },
+        {
+          excelColumn: 'marks',
+          databaseColumn: 'marks',
+          description: 'Marks/points for this question',
+          example: '1',
+          dataType: 'DECIMAL',
+          default: '1'
+        },
+        {
+          excelColumn: 'explanation',
+          alternateColumn: 'answer_explanation',
+          databaseColumn: 'explanation',
+          description: 'Explanation or answer key',
+          example: 'The capital of France is Paris',
+          dataType: 'TEXT',
+          default: ''
+        },
+        {
+          excelColumn: 'question_number',
+          databaseColumn: 'custom_number',
+          description: 'Custom question number (e.g., Q1, 1a, etc.)',
+          example: 'Q1',
+          dataType: 'TEXT',
+          default: ''
+        },
+        {
+          excelColumn: 'is_required',
+          databaseColumn: 'is_required',
+          description: 'Whether question is required',
+          example: 'true',
+          dataType: 'BOOLEAN',
+          default: 'true'
+        }
+      ]
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Column mapping retrieved successfully',
+      data: columnMapping
+    });
+
+  } catch (error) {
+    console.error('Get column mapping error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// Download Excel template for bulk import
+const downloadBulkImportTemplate = async (req, res) => {
+  try {
+    const xlsx = require('xlsx');
+
+    // Create template data with headers and sample row
+    const templateData = [
+      {
+        question_text: 'Sample question: What is 2 + 2?',
+        order_index: 1,
+        question_flag: 'I',
+        question_type: 'MULTIPLE_CHOICE',
+        difficulty_level: 'EASY',
+        marks: 1,
+        explanation: 'The answer is 4',
+        question_number: 'Q1',
+        is_required: true
+      }
+    ];
+
+    // Create workbook and worksheet
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.json_to_sheet(templateData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 50 },  // question_text
+      { wch: 12 },  // order_index
+      { wch: 15 },  // question_flag
+      { wch: 20 },  // question_type
+      { wch: 17 },  // difficulty_level
+      { wch: 10 },  // marks
+      { wch: 40 },  // explanation
+      { wch: 15 },  // question_number
+      { wch: 12 }   // is_required
+    ];
+
+    xlsx.utils.book_append_sheet(wb, ws, 'Questions');
+
+    // Generate buffer
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set headers for file download
+    res.setHeader('Content-Disposition', 'attachment; filename=question_import_template.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    return res.send(buffer);
+
+  } catch (error) {
+    console.error('Download template error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate template',
+      data: null
+    });
+  }
+};
+
 const bulkImportQuestions = async (req, res) => {
   try {
     const { sectionId } = req.params;
@@ -1177,6 +1336,8 @@ const getFormattedQuestion = async (req, res) => {
 module.exports = {
   getSectionQuestions,
   createSectionQuestion,
+  getBulkImportColumnMapping,
+  downloadBulkImportTemplate,
   bulkImportQuestions,
   getQuestionDetails,
   updateQuestion,

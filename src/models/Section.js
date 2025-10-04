@@ -355,9 +355,9 @@ const validateSectionRules = async (sectionData, testId) => {
 
   const errors = [];
 
-  // Question count validation
-  if (questionCount && (questionCount < 1 || questionCount > 100)) {
-    errors.push('Question count must be between 1 and 100');
+  // Question count validation - allow any positive number
+  if (questionCount && questionCount < 1) {
+    errors.push('Question count must be at least 1');
   }
 
   // Time limit validation against test duration

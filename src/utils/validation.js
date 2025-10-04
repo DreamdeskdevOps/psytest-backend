@@ -390,9 +390,9 @@ const validateSectionData = (sectionData) => {
     return { isValid: false, message: 'Section name cannot exceed 100 characters' };
   }
 
-  // Question count validation
-  if (!questionCount || questionCount < 1 || questionCount > 100) {
-    return { isValid: false, message: 'Question count must be between 1 and 100' };
+  // Question count validation - allow any positive number
+  if (!questionCount || questionCount < 1) {
+    return { isValid: false, message: 'Question count must be at least 1' };
   }
 
   // Answer pattern validation - now accepts any non-empty string as template ID
@@ -515,10 +515,10 @@ const validateSectionUpdateData = (updateData) => {
     }
   }
 
-  // Question count validation (only if provided)
+  // Question count validation (only if provided) - allow any positive number
   if (questionCount !== undefined) {
-    if (!questionCount || questionCount < 1 || questionCount > 100) {
-      return { isValid: false, message: 'Question count must be between 1 and 100' };
+    if (!questionCount || questionCount < 1) {
+      return { isValid: false, message: 'Question count must be at least 1' };
     }
   }
 

@@ -30,6 +30,16 @@ router.post('/sections/:sectionId/questions',
   adminQuestionController.createSectionQuestion
 );
 
+// GET /api/v1/admin/questions/bulk-import/column-mapping - Get column mapping info
+router.get('/bulk-import/column-mapping',
+  adminQuestionController.getBulkImportColumnMapping
+);
+
+// GET /api/v1/admin/questions/bulk-import/template - Download Excel template
+router.get('/bulk-import/template',
+  adminQuestionController.downloadBulkImportTemplate
+);
+
 // POST /api/v1/admin/questions/sections/:sectionId/questions/bulk-import - Bulk import questions from Excel
 router.post(
   '/sections/:sectionId/questions/bulk-import',

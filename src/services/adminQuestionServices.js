@@ -746,11 +746,13 @@ const bulkImportQuestions = async (sectionId, fileBuffer, adminId, ipAddress, us
     }
 
     const existingQuestions = await QuestionModel.getQuestionsBySection(sectionId);
+    const availableSlots = section.question_count - existingQuestions.length;
+
     if (existingQuestions.length + questionsData.length > section.question_count) {
       await t.rollback();
       return generateResponse(
         false,
-        `Importing ${questionsData.length} questions would exceed the section limit of ${section.question_count}.`,
+        `Cannot import ${questionsData.length} question(s). Section limit: ${section.question_count}, Current questions: ${existingQuestions.length}, Available slots: ${availableSlots}. Please delete some questions or increase the section limit.`,
         null,
         400
       );
