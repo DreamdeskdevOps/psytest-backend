@@ -43,14 +43,14 @@ const getQuestionsBySection = async (sectionId) => {
       q.difficulty_level, q.question_image, q.answer_explanation,
       q.question_type, q.question_content_type, q.question_flag, q.is_active,
       q.created_at, q.updated_at,
-      
+
       -- Section information for context
       s.section_name, s.answer_pattern, s.scoring_logic,
       s.answer_options as section_answer_options,
-      
+
       -- Test information
       t.title as test_title, t.test_type,
-      
+
       -- Question analytics
       (SELECT COUNT(*) FROM user_responses WHERE question_id = q.id) as total_answers,
       (SELECT AVG(CASE WHEN ur.is_correct = true THEN 1.0 ELSE 0.0 END)::DECIMAL(5,2)
@@ -66,7 +66,7 @@ const getQuestionsBySection = async (sectionId) => {
               FROM user_responses ur WHERE ur.question_id = q.id) < 0.5 THEN 'HARD'
         ELSE q.difficulty_level
       END as performance_difficulty
-      
+
     FROM ${TABLE_NAME} q
     JOIN test_sections s ON q.section_id = s.id
     JOIN tests t ON s.test_id = t.id

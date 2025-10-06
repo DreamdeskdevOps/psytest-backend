@@ -182,6 +182,7 @@ const createTestResult = async (req, res) => {
     const adminId = req.admin.id;
     const {
       test_id,
+      section_id,
       result_code,
       score_range,
       title,
@@ -190,10 +191,10 @@ const createTestResult = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!test_id || !result_code || !title) {
+    if (!test_id || !title) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: test_id, result_code, title',
+        message: 'Missing required fields: test_id, title',
         data: null
       });
     }
@@ -220,7 +221,8 @@ const createTestResult = async (req, res) => {
     // Prepare result data
     const resultData = {
       test_id,
-      result_code: result_code.trim(),
+      section_id: section_id || null,
+      result_code: result_code?.trim() || `R_${Date.now()}`,
       score_range: score_range?.trim() || null,
       title: title.trim(),
       description: description?.trim() || null,
@@ -267,6 +269,7 @@ const updateTestResult = async (req, res) => {
     const adminId = req.admin.id;
     const { id } = req.params;
     const {
+      section_id,
       result_code,
       score_range,
       title,
@@ -298,6 +301,7 @@ const updateTestResult = async (req, res) => {
 
     // Prepare update data
     const updateData = {};
+    if (section_id !== undefined) updateData.section_id = section_id || null;
     if (result_code !== undefined) updateData.result_code = result_code.trim();
     if (score_range !== undefined) updateData.score_range = score_range?.trim() || null;
     if (title !== undefined) updateData.title = title.trim();

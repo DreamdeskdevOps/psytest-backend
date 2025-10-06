@@ -3,7 +3,6 @@ const TestModel = require('../models/Test');
 const QuestionModel = require('../models/Questions');
 const SectionModel = require('../models/Section');
 const ScoringPatternModel = require('../models/ScoringPatterns');
-const AnswerOptionModel = require('../models/AnswerOption');
 const { generateResponse } = require('../utils/helpers');
 const { getMany } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
@@ -114,7 +113,6 @@ const getTestAttemptBySession = async (sessionToken) => {
 // Get questions for test attempt
 const getTestQuestions = async (sessionToken) => {
   try {
-    console.log('🔥🔥🔥 GET TEST QUESTIONS CALLED FOR SESSION:', sessionToken);
     const attempt = await TestAttemptModel.getTestAttemptBySessionToken(sessionToken);
 
     if (!attempt) {
@@ -128,16 +126,11 @@ const getTestQuestions = async (sessionToken) => {
     // Get test sections first
     const test = await TestModel.getTestById(attempt.test_id);
     const sections = await SectionModel.getSectionsByTestId(attempt.test_id);
-    console.log('🔥🔥🔥 FETCHED', sections.length, 'SECTIONS');
 
-    // Get questions organized by section with their answer options
+    // Get questions organized by section
     let allQuestions = [];
     for (const section of sections) {
       const sectionQuestions = await QuestionModel.getQuestionsBySection(section.id);
-      console.log(`Section ${section.section_name}: ${sectionQuestions.length} questions`);
-      if (sectionQuestions.length > 0) {
-        console.log(`First question images:`, sectionQuestions[0].images);
-      }
       allQuestions = allQuestions.concat(sectionQuestions.map(q => ({
         ...q,
         section_name: section.section_name,
@@ -147,14 +140,21 @@ const getTestQuestions = async (sessionToken) => {
       })));
     }
 
-    // Fetch question-specific options for all questions
-    const questionsWithOptions = await Promise.all(
-      allQuestions.map(async (q) => {
-        // Get question-specific options from answer_options table
-        const questionOptions = await AnswerOptionModel.getQuestionOptions(q.id);
+    console.log('\n🔍 DEBUG: Sections data:', JSON.stringify(sections.map(s => ({
+      id: s.id,
+      name: s.section_name,
+      has_custom_scoring: !!s.custom_scoring_config,
+      custom_scoring_config: s.custom_scoring_config
+    })), null, 2));
 
+    const responseData = {
+      questions: allQuestions.map(q => {
         // Find the section for this question to get section-level options
         const questionSection = sections.find(s => s.id === q.section_id);
+
+        console.log(`\n📝 Question ${q.id} (${q.question_text?.substring(0, 30)}...):`);
+        console.log(`   Section: ${questionSection?.section_name}`);
+        console.log(`   custom_scoring_config:`, questionSection?.custom_scoring_config);
 
         let sectionOptions = null;
         if (questionSection?.custom_scoring_config) {
@@ -163,54 +163,24 @@ const getTestQuestions = async (sessionToken) => {
               ? JSON.parse(questionSection.custom_scoring_config)
               : questionSection.custom_scoring_config;
             sectionOptions = config.section_options || null;
+            console.log(`   Parsed section_options:`, sectionOptions);
           } catch (error) {
-            console.error('Error parsing section config:', error);
+            console.error(`   Error parsing config:`, error);
           }
         }
 
-        // Priority: Use question-specific options if available, otherwise use section options
-        let finalOptions = null;
-        if (questionOptions && questionOptions.length > 0) {
-          // Format question options for frontend with text, value, and id
-          finalOptions = questionOptions.map(opt => ({
-            id: opt.id,
-            text: opt.option_text,
-            value: opt.option_value || opt.option_text,
-            order: opt.option_order
-          }));
-        } else if (sectionOptions && sectionOptions.length > 0) {
-          finalOptions = sectionOptions;
-        }
-
-        const result = {
-          ...q,
-          answer_options: finalOptions
+        return {
+          id: q.id,
+          text: q.question_text,
+          section_id: q.section_id,
+          question_order: q.question_order,
+          answer_options: sectionOptions,  // Add section options to each question
+          section_name: q.section_name,
+          section_order: q.section_order,
+          question_type: q.question_type,
+          difficulty_level: q.difficulty_level
         };
-
-        // Log if this question has images
-        if (result.images && result.images.length > 0) {
-          console.log(`✅ Question ${result.id} has ${result.images.length} images`);
-        }
-
-        return result;
-      })
-    );
-
-    const responseData = {
-      questions: questionsWithOptions.map(q => ({
-        id: q.id,
-        text: q.question_text,
-        section_id: q.section_id,
-        question_order: q.question_order,
-        answer_options: q.answer_options,
-        section_name: q.section_name,
-        section_order: q.section_order,
-        question_type: q.question_type,
-        difficulty_level: q.difficulty_level,
-        question_image: q.question_image,
-        question_content_type: q.question_content_type,
-        images: q.images || []
-      })),
+      }),
       sections: sections.map(s => ({
         id: s.id,
         name: s.section_name,

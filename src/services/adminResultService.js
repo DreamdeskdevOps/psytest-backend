@@ -102,34 +102,36 @@ const createTestResult = async (resultData, adminId) => {
       return generateResponse(false, 'Test not found', null, 404);
     }
 
-    // Check if result code already exists for this test
-    const existingResult = await TestResultModel.getResultByTestAndCode(
-      resultData.test_id,
-      resultData.result_code
-    );
+    // Check if result code already exists for this test (only check if result_code is provided and not empty)
+    if (resultData.result_code && resultData.result_code.trim() !== '') {
+      const existingResult = await TestResultModel.getResultByTestAndCode(
+        resultData.test_id,
+        resultData.result_code
+      );
 
-    if (existingResult) {
-      // If result exists but is soft-deleted, reactivate it with new data
-      if (!existingResult.is_active) {
-        const updatedData = {
-          ...resultData,
-          is_active: true,
-          updated_at: new Date()
-        };
+      if (existingResult) {
+        // If result exists but is soft-deleted, reactivate it with new data
+        if (!existingResult.is_active) {
+          const updatedData = {
+            ...resultData,
+            is_active: true,
+            updated_at: new Date()
+          };
 
-        const reactivatedResult = await TestResultModel.updateTestResult(existingResult.id, updatedData);
+          const reactivatedResult = await TestResultModel.updateTestResult(existingResult.id, updatedData);
 
-        const responseData = {
-          result: reactivatedResult,
-          adminId: adminId,
-          message: 'Test result reactivated and updated successfully'
-        };
+          const responseData = {
+            result: reactivatedResult,
+            adminId: adminId,
+            message: 'Test result reactivated and updated successfully'
+          };
 
-        return generateResponse(true, 'Test result reactivated and updated successfully', responseData, 200);
+          return generateResponse(true, 'Test result reactivated and updated successfully', responseData, 200);
+        }
+
+        // If result exists and is active, return conflict
+        return generateResponse(false, 'Result code already exists for this test', null, 409);
       }
-
-      // If result exists and is active, return conflict
-      return generateResponse(false, 'Result code already exists for this test', null, 409);
     }
 
     // Determine result type based on score_range

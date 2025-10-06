@@ -43,6 +43,7 @@ app.use('/api/' + process.env.API_VERSION + '/admin/tests', adminTestRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/sections', adminSectionRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/questions', adminQuestionRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/answers', adminAnswersRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/options', adminAnswersRoutes); // Also mount at /options for frontend compatibility
 app.use('/api/' + process.env.API_VERSION + '/admin/option-types', adminOptionTypesRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/configuration', adminConfigurationRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/files', adminFileRoutes);

@@ -6,16 +6,20 @@ const TABLE_NAME = 'test_results';
 const getAllTestResults = async (filters = {}) => {
   let query = `
     SELECT
-      tr.id, tr.test_id, tr.result_code, tr.score_range,
+      tr.id, tr.test_id, tr.section_id, tr.result_code, tr.score_range,
       tr.title, tr.description, tr.pdf_file, tr.pdf_upload_date,
       tr.pdf_file_size, tr.result_type, tr.usage_count,
       tr.last_used, tr.is_active, tr.created_at, tr.updated_at,
 
       -- Test information
-      t.title as test_title, t.test_type, t.description as test_description
+      t.title as test_title, t.test_type, t.description as test_description,
+
+      -- Section information
+      s.section_name
 
     FROM ${TABLE_NAME} tr
     LEFT JOIN tests t ON tr.test_id = t.id
+    LEFT JOIN test_sections s ON tr.section_id = s.id
     WHERE 1=1
   `;
 
@@ -84,13 +88,15 @@ const getAllTestResults = async (filters = {}) => {
 const getResultsByTestId = async (testId) => {
   const query = `
     SELECT
-      tr.id, tr.test_id, tr.result_code, tr.score_range,
+      tr.id, tr.test_id, tr.section_id, tr.result_code, tr.score_range,
       tr.title, tr.description, tr.pdf_file, tr.pdf_upload_date,
       tr.pdf_file_size, tr.result_type, tr.usage_count,
-      tr.last_used, tr.is_active, tr.created_at, tr.updated_at
+      tr.last_used, tr.is_active, tr.created_at, tr.updated_at,
+      s.section_name
     FROM ${TABLE_NAME} tr
+    LEFT JOIN test_sections s ON tr.section_id = s.id
     WHERE tr.test_id = $1 AND tr.is_active = true
-    ORDER BY tr.result_code ASC
+    ORDER BY s.section_order ASC NULLS FIRST, tr.result_code ASC
   `;
 
   return await getMany(query, [testId]);
@@ -100,16 +106,20 @@ const getResultsByTestId = async (testId) => {
 const getTestResultById = async (id) => {
   const query = `
     SELECT
-      tr.id, tr.test_id, tr.result_code, tr.score_range,
+      tr.id, tr.test_id, tr.section_id, tr.result_code, tr.score_range,
       tr.title, tr.description, tr.pdf_file, tr.pdf_upload_date,
       tr.pdf_file_size, tr.result_type, tr.usage_count,
       tr.last_used, tr.is_active, tr.created_at, tr.updated_at,
 
       -- Test information
-      t.title as test_title, t.test_type
+      t.title as test_title, t.test_type,
+
+      -- Section information
+      s.section_name
 
     FROM ${TABLE_NAME} tr
     LEFT JOIN tests t ON tr.test_id = t.id
+    LEFT JOIN test_sections s ON tr.section_id = s.id
     WHERE tr.id = $1
   `;
 
@@ -162,6 +172,7 @@ const getResultByScoreRange = async (testId, score) => {
 const createTestResult = async (resultData) => {
   const {
     test_id,
+    section_id,
     result_code,
     score_range,
     title,
@@ -173,15 +184,16 @@ const createTestResult = async (resultData) => {
 
   const query = `
     INSERT INTO ${TABLE_NAME} (
-      test_id, result_code, score_range, title, description,
+      test_id, section_id, result_code, score_range, title, description,
       pdf_file, pdf_file_size, result_type, pdf_upload_date
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *
   `;
 
   const values = [
     test_id,
+    section_id || null,
     result_code,
     score_range || null,
     title,
@@ -198,7 +210,7 @@ const createTestResult = async (resultData) => {
 // Update test result
 const updateTestResult = async (id, updateData) => {
   const allowedFields = [
-    'result_code', 'score_range', 'title', 'description',
+    'section_id', 'result_code', 'score_range', 'title', 'description',
     'pdf_file', 'pdf_file_size', 'result_type', 'is_active'
   ];
 

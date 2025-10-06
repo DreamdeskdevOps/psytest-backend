@@ -170,8 +170,8 @@ const updateAnswerOption = async (optionId, updateData, adminId, ipAddress, user
     // Update question's correct answer if this option was marked correct
     if (updateData.isCorrect === true) {
       await QuestionModel.updateQuestion(
-        existingOption.question_id, 
-        { correctAnswer: updatedOption.option_text }, 
+        existingOption.question_id,
+        { correctAnswer: updatedOption.option_text },
         adminId
       );
     }
@@ -224,8 +224,8 @@ const deleteAnswerOption = async (optionId, adminId, ipAddress, userAgent) => {
     // If deleted option was correct answer, clear question's correct answer
     if (existingOption.is_correct) {
       await QuestionModel.updateQuestion(
-        existingOption.question_id, 
-        { correctAnswer: null }, 
+        existingOption.question_id,
+        { correctAnswer: null },
         adminId
       );
     }

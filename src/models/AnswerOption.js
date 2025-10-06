@@ -276,7 +276,7 @@ const setQuestionOptionType = async (questionId, optionType, customOptions = nul
   // Get available option types
   const availableTypes = await getAvailableOptionTypes();
   const selectedType = availableTypes.find(type => type.type === optionType);
-  
+
   if (!selectedType) {
     throw new Error(`Invalid option type: ${optionType}`);
   }
