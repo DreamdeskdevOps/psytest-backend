@@ -24,7 +24,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 200 * 1024 * 1024 // 200MB limit
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
@@ -302,9 +302,11 @@ const updateTestResult = async (req, res) => {
     // Prepare update data
     const updateData = {};
     if (section_id !== undefined) updateData.section_id = section_id || null;
-    if (result_code !== undefined) updateData.result_code = result_code.trim();
+    if (result_code !== undefined) {
+      updateData.result_code = (result_code && result_code.trim()) || `R_${Date.now()}`;
+    }
     if (score_range !== undefined) updateData.score_range = score_range?.trim() || null;
-    if (title !== undefined) updateData.title = title.trim();
+    if (title !== undefined && title) updateData.title = typeof title === 'string' ? title.trim() : title;
     if (description !== undefined) updateData.description = description?.trim() || null;
     if (result_type !== undefined) updateData.result_type = result_type;
     if (is_active !== undefined) updateData.is_active = is_active;

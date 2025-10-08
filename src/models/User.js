@@ -64,13 +64,13 @@ class User {
   // Find user by ID
   async findById(id) {
     const query = `
-      SELECT 
+      SELECT
         id, first_name, last_name, email, phone_number, avatar,
         date_of_birth, gender, address, is_email_verified,
         subscription_type, subscription_status, subscription_end_date,
-        total_tests_attempted, total_tests_completed, average_score, 
-        best_score, created_at, updated_at
-      FROM ${this.tableName} 
+        total_tests_attempted, total_tests_completed, average_score,
+        best_score, age, school_name, class, created_at, updated_at
+      FROM ${this.tableName}
       WHERE id = $1
     `;
     return await getOne(query, [id]);
@@ -89,40 +89,59 @@ class User {
 
   // Update user profile
   async updateProfile(id, profileData) {
-    const {
-      firstName,
-      lastName,
-      phoneNumber,
-      dateOfBirth,
-      gender,
-      address
-    } = profileData;
+    // Build dynamic update query based on provided fields
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
 
-    const cleanPhone = phoneNumber ? phoneNumber.replace(/[\s+\-()]/g, '').replace(/^(\+91|91)/, '') : null;
+    // Map camelCase to snake_case
+    const fieldMapping = {
+      firstName: 'first_name',
+      lastName: 'last_name',
+      phoneNumber: 'phone_number',
+      dateOfBirth: 'date_of_birth',
+      gender: 'gender',
+      address: 'address',
+      avatar: 'avatar',
+      age: 'age',
+      schoolName: 'school_name',
+      class: 'class'
+    };
+
+    Object.keys(profileData).forEach(key => {
+      const dbField = fieldMapping[key];
+      if (dbField && profileData[key] !== undefined && profileData[key] !== null) {
+        updates.push(`${dbField} = $${paramCount}`);
+
+        // Handle special cases
+        if (key === 'phoneNumber') {
+          values.push(profileData[key].replace(/[\s+\-()]/g, '').replace(/^(\+91|91)/, ''));
+        } else if (key === 'address') {
+          values.push(JSON.stringify(profileData[key] || {}));
+        } else {
+          values.push(profileData[key]);
+        }
+        paramCount++;
+      }
+    });
+
+    if (updates.length === 0) {
+      // If no fields to update, just return current user
+      return await this.findById(id);
+    }
+
+    // Add updated_at
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
 
     const query = `
       UPDATE ${this.tableName} SET
-        first_name = $1,
-        last_name = $2,
-        phone_number = $3,
-        date_of_birth = $4,
-        gender = $5,
-        address = $6,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $7
-      RETURNING id, first_name, last_name, email, phone_number, 
-                date_of_birth, gender, address, updated_at
+        ${updates.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING id, first_name, last_name, email, phone_number,
+                date_of_birth, gender, address, avatar, age, school_name, class, updated_at
     `;
 
-    const values = [
-      firstName,
-      lastName,
-      cleanPhone,
-      dateOfBirth,
-      gender,
-      JSON.stringify(address || {}),
-      id
-    ];
+    values.push(id);
 
     return await updateOne(query, values);
   }

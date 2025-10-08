@@ -729,7 +729,7 @@ const updateQuestionWithImages = async (questionId, questionData, imageFiles, ad
 
   if (imageFiles && imageFiles.length > 0) {
     // Remove existing images first
-    await removeQuestionImages(questionId, adminId);
+    await QuestionImages.deleteAllQuestionImages(questionId);
 
     // Add new images using the same logic as create
     const fileStorageService = require('../services/fileStorageService');

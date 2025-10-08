@@ -219,6 +219,11 @@ const updateProfile = async (req, res) => {
     const userId = req.user.id;
     const { otpCode, ...profileData } = req.body;
 
+    // Add profile image if uploaded
+    if (req.file) {
+      profileData.avatar = req.file.filename;
+    }
+
     const updatedUser = await authService.updateUserProfile(userId, profileData, otpCode);
 
     return sendSuccessResponse(res, 200, SUCCESS_MESSAGES.PROFILE_UPDATED, { user: updatedUser });

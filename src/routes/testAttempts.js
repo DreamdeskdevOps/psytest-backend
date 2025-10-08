@@ -139,12 +139,14 @@ router.post('/session/:sessionToken/submit', async (req, res) => {
   }
 });
 
-// Get user's test attempts
+// Get user's test attempts (authenticated - shows only current user's results)
 router.get('/user/attempts', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const result = await testAttemptService.getUserTestAttempts(userId);
+    console.log('\n🔐 Fetching authenticated user attempts for user:', userId);
+
+    const result = await testAttemptService.getAllCompletedTestAttempts(userId);
     res.status(result.statusCode).json(result);
 
   } catch (error) {

@@ -918,6 +918,102 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
       console.log(`💡 Consider adding admin result for average score ${averageScore.toFixed(2)}`);
     }
 
+    // NEW: Calculate individual section results for multi-section tests
+    console.log('\n🎯 SECTION-WISE RESULT MATCHING:');
+    console.log('─────────────────────────────────────────────');
+
+    const sectionCount = Object.keys(sectionScores).length;
+    const hasMultipleSections = sectionCount > 1;
+    console.log(`📊 Test has ${sectionCount} section(s)`);
+    console.log(`🔍 Multi-section mode: ${hasMultipleSections ? 'YES' : 'NO'}`);
+
+    let sectionResults = [];
+
+    if (hasMultipleSections) {
+      console.log('\n🎯 Calculating individual results for each section...\n');
+
+      // For each section, find matching result based on section score
+      for (const [sectionName, sectionData] of Object.entries(sectionScores)) {
+        const sectionTotalScore = sectionData.total;
+        const sectionQuestionCount = sectionData.count;
+        const sectionAverageScore = sectionQuestionCount > 0 ? (sectionTotalScore / sectionQuestionCount) : 0;
+
+        console.log(`\n📋 Processing Section: ${sectionName}`);
+        console.log(`   🔢 Total Score: ${sectionTotalScore}`);
+        console.log(`   📊 Average Score: ${sectionAverageScore.toFixed(2)}`);
+        console.log(`   📝 Questions: ${sectionQuestionCount}`);
+
+        // Get section ID from questions
+        const sectionQuestion = questions.find(q => (q.section_name || `Section ${q.section_id}`) === sectionName);
+        const sectionId = sectionQuestion?.section_id;
+
+        // Find result for this specific section
+        const sectionRanges = await getMany(`
+          SELECT *,
+            CAST(SPLIT_PART(score_range, '-', 1) AS DECIMAL) as min_score
+          FROM test_results
+          WHERE test_id = $1 AND result_type = 'range_based' AND is_active = true
+          AND (section_id = $2 OR section_id IS NULL)
+          ORDER BY min_score ASC
+        `, [testId, sectionId]);
+
+        console.log(`   🔍 Found ${sectionRanges.length} possible result ranges for this section`);
+
+        let sectionMatchingResult = null;
+
+        // Try to match with section's total score
+        for (const range of sectionRanges) {
+          if (range.score_range) {
+            const [min, max] = range.score_range.split('-').map(n => parseFloat(n));
+            const isMatchTotal = sectionTotalScore >= min && sectionTotalScore <= max;
+
+            if (isMatchTotal) {
+              sectionMatchingResult = range;
+              console.log(`   ✅ Matched with total score ${sectionTotalScore} in range ${range.score_range}`);
+              console.log(`   🏆 Result: "${range.title}"`);
+              break;
+            }
+          }
+        }
+
+        // If no match with total, try average
+        if (!sectionMatchingResult) {
+          for (const range of sectionRanges) {
+            if (range.score_range) {
+              const [min, max] = range.score_range.split('-').map(n => parseFloat(n));
+              const isMatchAvg = sectionAverageScore >= min && sectionAverageScore <= max;
+
+              if (isMatchAvg) {
+                sectionMatchingResult = range;
+                console.log(`   ✅ Matched with average score ${sectionAverageScore.toFixed(2)} in range ${range.score_range}`);
+                console.log(`   🏆 Result: "${range.title}"`);
+                break;
+              }
+            }
+          }
+        }
+
+        if (!sectionMatchingResult) {
+          console.log(`   ⚠️ No matching result found for ${sectionName}`);
+        }
+
+        sectionResults.push({
+          sectionName: sectionName,
+          sectionId: sectionId,
+          totalScore: sectionTotalScore,
+          averageScore: sectionAverageScore.toFixed(2),
+          questionCount: sectionQuestionCount,
+          resultCode: sectionMatchingResult?.result_code || null,
+          resultTitle: sectionMatchingResult?.title || `${sectionName} Result`,
+          resultDescription: sectionMatchingResult?.description || null,
+          pdfFile: sectionMatchingResult?.pdf_file || null,
+          scoreRange: sectionMatchingResult?.score_range || null
+        });
+      }
+
+      console.log(`\n✅ Generated ${sectionResults.length} section-wise results`);
+    }
+
     console.log('🎯 =============================================');
     console.log('🎯 END RANGE-BASED SCORING BREAKDOWN');
     console.log('🎯 =============================================');
@@ -931,7 +1027,9 @@ const calculateRangeBasedScore = async (answers, questions, scoringConfig, testI
       resultCode: matchingResult?.result_code || null,
       resultTitle: matchingResult?.title || null,
       resultDescription: matchingResult?.description || null,
-      pdfFile: matchingResult?.pdf_file || null
+      pdfFile: matchingResult?.pdf_file || null,
+      hasMultipleSections: hasMultipleSections,
+      sectionResults: sectionResults.length > 0 ? sectionResults : null
     };
 
   } catch (error) {
@@ -1281,7 +1379,9 @@ const submitTestAttempt = async (sessionToken) => {
         totalScore: scoreResult.totalScore,
         questionCount: scoreResult.questionCount,
         averageScore: scoreResult.averageScore,
-        testResult: scoreResult.testResult
+        testResult: scoreResult.testResult,
+        hasMultipleSections: scoreResult.hasMultipleSections || false,
+        sectionResults: scoreResult.sectionResults || null
       };
 
       // For range-based, use result info if available
@@ -1397,39 +1497,40 @@ const abandonTestAttempt = async (sessionToken) => {
   }
 };
 
-// Get all completed test attempts with full details
-const getAllCompletedTestAttempts = async () => {
+// Get all completed test attempts with full details (optionally filtered by user)
+const getAllCompletedTestAttempts = async (userId = null) => {
   try {
     const { getMany } = require('../config/database');
 
-    // First check what test attempts exist at all
-    let allAttempts = [];
-    let completedAttempts = [];
+    // Build query with optional user filtering
+    let query = `
+      SELECT
+        ta.*,
+        t.title as test_title,
+        t.description as test_description
+      FROM test_attempts ta
+      LEFT JOIN tests t ON ta.test_id = t.id
+      WHERE ta.status = 'completed'
+    `;
 
-    try {
-      allAttempts = await getMany(`
-        SELECT session_token, status, id, created_at
-        FROM test_attempts
-        ORDER BY created_at DESC
-        LIMIT 5
-      `);
-      console.log('📊 All test attempts:', allAttempts.length);
-    } catch (e) {
-      console.log('⚠️ Error fetching all attempts:', e.message);
+    const params = [];
+
+    // Add user filter if userId is provided
+    if (userId) {
+      query += ` AND ta.user_id = $1`;
+      params.push(userId);
+      console.log('🔐 Filtering results for user:', userId);
+    } else {
+      console.log('⚠️ No user filter - returning all results (for testing only)');
     }
 
-    // Then get completed attempts with test details
+    query += ` ORDER BY ta.completed_at DESC, ta.created_at DESC`;
+
+    // Get completed attempts with test details
+    let completedAttempts = [];
     try {
-      completedAttempts = await getMany(`
-        SELECT
-          ta.*,
-          t.title as test_title,
-          t.description as test_description
-        FROM test_attempts ta
-        LEFT JOIN tests t ON ta.test_id = t.id
-        WHERE ta.status = 'completed'
-        ORDER BY ta.completed_at DESC, ta.created_at DESC
-      `);
+      completedAttempts = await getMany(query, params);
+      console.log('📊 Found', completedAttempts.length, 'completed test attempts');
     } catch (e) {
       console.log('⚠️ Error fetching completed attempts:', e.message);
       // If the query fails, return empty result instead of error

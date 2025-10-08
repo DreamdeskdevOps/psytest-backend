@@ -1,11 +1,42 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 
 // Import controller methods (clean import)
 const userAuthController = require('../controllers/auth/userAuthController');
 
 // Import middleware
 const { authMiddleware } = require('../middleware/auth');
+
+// Configure multer for profile picture uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/profiles/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+    cb(null, `profile-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files (JPEG, PNG, GIF) are allowed'));
+    }
+  }
+});
 
 // Import validations
 const {
@@ -144,9 +175,10 @@ router.get('/profile',
  * @desc    Update user profile
  * @access  Private (User)
  */
-router.put('/profile', 
-  authMiddleware, 
-  validateProfileUpdate, 
+router.put('/profile',
+  authMiddleware,
+  upload.single('profileImage'),
+  validateProfileUpdate,
   userAuthController.updateProfile
 );
 

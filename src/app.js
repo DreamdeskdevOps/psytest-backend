@@ -36,6 +36,9 @@ app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // Routes
 app.use('/api/' + process.env.API_VERSION + '/auth', authRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/auth', adminAuthRoutes);

@@ -1,3 +1,4 @@
+
 const { getOne, insertOne, updateOne, deleteOne, getMany } = require('../config/database');
 
 const TABLE_NAME = 'tests';
