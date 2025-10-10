@@ -115,12 +115,23 @@ class PDFGenerationService {
       // Load custom fonts (NexaRustSans)
       try {
         const nexaRustPath = path.join(__dirname, '../../fonts/NexaRustSans-Trial-Black2.ttf');
+        console.log('📁 Attempting to load font from:', nexaRustPath);
+
         const nexaRustBytes = await fs.readFile(nexaRustPath);
-        fonts['NexusRustSans'] = await pdfDoc.embedFont(nexaRustBytes);
-        console.log('✓ Custom font NexaRustSans loaded successfully');
+        console.log('📦 Font file loaded, size:', nexaRustBytes.length, 'bytes');
+
+        // Register fontkit for custom font support
+        const fontkit = require('@pdf-lib/fontkit');
+        pdfDoc.registerFontkit(fontkit);
+
+        fonts['NexusRustSans'] = await pdfDoc.embedFont(nexaRustBytes, { subset: true });
+        console.log('✓ Custom font NexaRustSans loaded successfully with fontkit');
       } catch (error) {
-        console.warn('⚠️ Could not load NexaRustSans font:', error.message);
+        console.error('⚠️ Could not load NexaRustSans font:');
+        console.error('   Error message:', error.message);
+        console.error('   Error stack:', error.stack);
         console.warn('   Please place NexaRustSans-Trial-Black2.ttf in /fonts/ directory');
+        console.warn('   Font will fallback to Helvetica');
       }
 
       // Default fonts for backwards compatibility
@@ -595,8 +606,9 @@ class PDFGenerationService {
     const isBold = fontWeight === 'bold' || parseInt(fontWeight) >= 600;
 
     // Map CSS font families to PDF fonts
-    // Check for NexusRustSans first (custom font)
-    if (fontFamily.includes('NexusRustSans') || fontFamily.includes('Nexus Rust')) {
+    // Check for NexaRustSans/NexusRustSans first (custom font - support both spellings)
+    if (fontFamily.includes('NexaRustSans') || fontFamily.includes('NexusRustSans') ||
+        fontFamily.includes('Nexa Rust') || fontFamily.includes('Nexus Rust')) {
       return fonts['NexusRustSans'] || fonts['Helvetica']; // Fallback to Helvetica if not loaded
     } else if (fontFamily.includes('Times') || fontFamily.includes('serif')) {
       return isBold ? fonts['Times-Bold'] : fonts['Times-Roman'];

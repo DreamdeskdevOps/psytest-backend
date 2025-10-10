@@ -11,6 +11,7 @@
     "seed": "sequelize db:seed:all"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
