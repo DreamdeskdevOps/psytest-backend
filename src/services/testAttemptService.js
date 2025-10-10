@@ -1425,6 +1425,48 @@ const submitTestAttempt = async (sessionToken) => {
 
     console.log('✅ Test attempt completed successfully');
 
+    // Check if test has PDF template assigned and generate personalized PDF (optional)
+    let generatedPdfPath = null;
+    try {
+      const { getOne } = require('../config/database');
+      const testInfo = await getOne(`
+        SELECT t.id, t.title, t.pdf_template_id, u.first_name, u.last_name, u.email
+        FROM tests t
+        LEFT JOIN users u ON u.id = $1
+        WHERE t.id = $2
+      `, [attempt.user_id, attempt.test_id]);
+
+      // Only generate PDF if template is assigned
+      if (testInfo && testInfo.pdf_template_id) {
+        console.log('📄 PDF template assigned, generating personalized PDF...');
+
+        const pdfGenerationService = require('./pdfGenerationService');
+
+        // Prepare simple student data for PDF
+        const studentData = {
+          studentName: `${testInfo.first_name || ''} ${testInfo.last_name || ''}`.trim() || 'Student',
+          resultDescription: scoreResult.resultDescription || scoreResult.testResult?.description || '',
+          studentEmail: testInfo.email || '',
+          resultCode: scoreResult.resultCode || scoreResult.finalResultCode || '',
+          resultTitle: scoreResult.resultTitle || scoreResult.testResult?.title || ''
+        };
+
+        generatedPdfPath = await pdfGenerationService.generateStudentPDF(
+          attempt.test_id,
+          attempt.user_id,
+          attempt.id,
+          studentData
+        );
+
+        console.log('✅ PDF generated:', generatedPdfPath);
+      } else {
+        console.log('ℹ️ No PDF template assigned to this test');
+      }
+    } catch (pdfError) {
+      console.error('⚠️ PDF generation failed (continuing anyway):', pdfError.message);
+      // Don't fail the entire submission if PDF generation fails
+    }
+
     const responseData = {
       attempt: completedAttempt,
       finalScore,
@@ -1433,6 +1475,7 @@ const submitTestAttempt = async (sessionToken) => {
       resultCode: scoreResult.resultCode || scoreResult.finalResultCode,
       testResult: scoreResult.testResult,
       pdfFile: scoreResult.pdfFile || scoreResult.testResult?.pdf_file,
+      generatedPdfPath: generatedPdfPath, // New: personalized PDF path
       resultTitle: scoreResult.resultTitle || scoreResult.testResult?.title,
       resultDescription: scoreResult.resultDescription || scoreResult.testResult?.description,
       flagScores: scoreResult.flagScores,
@@ -1459,6 +1502,16 @@ const submitTestAttempt = async (sessionToken) => {
 const getUserTestAttempts = async (userId) => {
   try {
     const attempts = await TestAttemptModel.getTestAttemptsByUserId(userId);
+
+    console.log('🔍 getUserTestAttempts - Total attempts:', attempts.length);
+    if (attempts.length > 0) {
+      console.log('🔍 First attempt data:', {
+        id: attempts[0].id,
+        test_title: attempts[0].test_title,
+        generated_pdf_path: attempts[0].generated_pdf_path,
+        has_pdf: !!attempts[0].generated_pdf_path
+      });
+    }
 
     const responseData = {
       attempts,
@@ -1507,9 +1560,11 @@ const getAllCompletedTestAttempts = async (userId = null) => {
       SELECT
         ta.*,
         t.title as test_title,
-        t.description as test_description
+        t.description as test_description,
+        pgh.pdf_file_path as generated_pdf_path
       FROM test_attempts ta
       LEFT JOIN tests t ON ta.test_id = t.id
+      LEFT JOIN pdf_generation_history pgh ON pgh.attempt_id = ta.id AND pgh.generation_status = 'success'
       WHERE ta.status = 'completed'
     `;
 
@@ -1667,6 +1722,7 @@ const getAllCompletedTestAttempts = async (userId = null) => {
           result_title: resultTitle,
           result_description: resultDescription,
           pdf_file: pdfFile,
+          generated_pdf_path: attempt.generated_pdf_path, // Personalized PDF path
           section_results: sectionScores,
           session_token: attempt.id,
           percentage: parseFloat(attempt.percentage) || 0,

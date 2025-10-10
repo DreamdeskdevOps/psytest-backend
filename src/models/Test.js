@@ -163,8 +163,13 @@ const createCustomTest = async (testData, adminId) => {
 const updateTestConfig = async (id, updateData, adminId) => {
   const {
     title, description, instructions, testType,
-    durationMinutes, isFree, price, passingScore, maxAttempts, settings
+    durationMinutes, isFree, price, passingScore, maxAttempts, settings, pdf_template_id
   } = updateData;
+
+  console.log('🔧 updateTestConfig called');
+  console.log('  Test ID:', id);
+  console.log('  pdf_template_id in updateData:', pdf_template_id);
+  console.log('  pdf_template_id !== undefined:', pdf_template_id !== undefined);
 
   const query = `
     UPDATE ${TABLE_NAME}
@@ -177,10 +182,14 @@ const updateTestConfig = async (id, updateData, adminId) => {
       is_free = COALESCE($7, is_free),
       price = COALESCE($8, price),
       passing_score = COALESCE($9, passing_score),
-      max_attempts = COALESCE($10, max_attempts)
+      max_attempts = COALESCE($10, max_attempts),
+      pdf_template_id = COALESCE($11, pdf_template_id)
     WHERE id = $1
     RETURNING *
   `;
+
+  const pdfTemplateValue = pdf_template_id !== undefined ? pdf_template_id : null;
+  console.log('  Actual value for $11:', pdfTemplateValue);
 
   const values = [
     id,
@@ -192,10 +201,14 @@ const updateTestConfig = async (id, updateData, adminId) => {
     isFree !== undefined ? isFree : null,
     price !== undefined ? price : null,
     passingScore || null,
-    maxAttempts || null
+    maxAttempts || null,
+    pdfTemplateValue
   ];
 
-  return await getOne(query, values);
+  const result = await getOne(query, values);
+  console.log('  Result pdf_template_id after update:', result?.pdf_template_id);
+
+  return result;
 };
 
 // Admin soft delete (preserves user attempt history)

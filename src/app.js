@@ -19,6 +19,7 @@ const adminScoringRoutes = require('./routes/admin/scoring');
 const adminScoringPatternsRoutes = require('./routes/admin/scoringPatterns');
 const adminResultRoutes = require('./routes/admin/results');
 const adminResultComponentRoutes = require('./routes/admin/resultComponents');
+const pdfTemplateRoutes = require('./routes/pdfTemplates');
 const fileServingRoutes = require('./routes/fileServing');
 const testAttemptRoutes = require('./routes/testAttempts');
 const userTestRoutes = require('./routes/userTests');
@@ -54,6 +55,7 @@ app.use('/api/' + process.env.API_VERSION + '/admin/scoring', adminScoringRoutes
 app.use('/api/' + process.env.API_VERSION + '/admin/scoring-patterns', adminScoringPatternsRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/results', adminResultRoutes);
 app.use('/api/' + process.env.API_VERSION + '/admin/result-components', adminResultComponentRoutes);
+app.use('/api/' + process.env.API_VERSION + '/admin/pdf-templates', pdfTemplateRoutes);
 app.use('/api/' + process.env.API_VERSION + '/files', fileServingRoutes);
 app.use('/api/' + process.env.API_VERSION + '/test-attempts', testAttemptRoutes);
 app.use('/api/' + process.env.API_VERSION + '/user-tests', userTestRoutes);

@@ -74,10 +74,14 @@ const getTestAttemptsByUserId = async (userId) => {
       ta.started_at, ta.completed_at, ta.created_at,
 
       -- Test information
-      t.title as test_title, t.test_type, t.description as test_description
+      t.title as test_title, t.test_type, t.description as test_description,
+
+      -- Generated PDF path (from pdf_generation_history)
+      pgh.pdf_file_path as generated_pdf_path
 
     FROM ${TABLE_NAME} ta
     LEFT JOIN tests t ON ta.test_id = t.id
+    LEFT JOIN pdf_generation_history pgh ON pgh.attempt_id = ta.id AND pgh.generation_status = 'success'
     WHERE ta.user_id = $1
     ORDER BY ta.created_at DESC
   `;

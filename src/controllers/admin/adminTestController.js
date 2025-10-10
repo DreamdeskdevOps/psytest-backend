@@ -191,7 +191,8 @@ const updateTest = async (req, res) => {
       price,
       passingScore,
       maxAttempts,
-      settings
+      settings,
+      pdf_template_id
     } = req.body;
 
     // Build update data (only include provided fields)
@@ -206,6 +207,7 @@ const updateTest = async (req, res) => {
     if (passingScore !== undefined) updateData.passingScore = parseInt(passingScore);
     if (maxAttempts !== undefined) updateData.maxAttempts = parseInt(maxAttempts);
     if (settings !== undefined) updateData.settings = settings;
+    if (pdf_template_id !== undefined) updateData.pdf_template_id = pdf_template_id;
 
     const result = await adminTestService.updateTest(id, updateData, adminId, ipAddress, userAgent);
 
