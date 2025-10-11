@@ -2,6 +2,7 @@ const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const fs = require('fs').promises;
 const path = require('path');
 const { getOne, executeQuery } = require('../config/database');
+const { parseDescription, getSegmentValue } = require('../utils/descriptionSegmentParser');
 
 /**
  * PDF Generation Service
@@ -173,7 +174,14 @@ class PDFGenerationService {
       for (const field of textFields) {
         // Support both 'name' (new format) and 'fieldName' (old format)
         const fieldName = field.name || field.fieldName;
-        const value = this.getFieldValue(fieldName, mergedData);
+
+        // Check if this is a segment-based field (has segment_key and segment_part)
+        let value;
+        if (field.segment_key && field.segment_part) {
+          value = this.getSegmentFieldValue(fieldName, field.segment_key, field.segment_part, mergedData);
+        } else {
+          value = this.getFieldValue(fieldName, mergedData);
+        }
 
         if (value) {
           const fontSize = field.fontSize || 14;
@@ -228,23 +236,33 @@ class PDFGenerationService {
           const maxWidth = field.maxWidth || 500; // Default max width
           const lineHeight = fontSize * 1.2; // Line spacing
 
-          // Split text into lines that fit within maxWidth
-          const words = cleanValue.split(' ');
+          // First, split by newlines (for bullet lists and pre-formatted content)
+          const paragraphs = cleanValue.split('\n');
           const lines = [];
-          let currentLine = '';
 
-          for (const word of words) {
-            const testLine = currentLine ? `${currentLine} ${word}` : word;
-            const textWidth = selectedFont.widthOfTextAtSize(testLine, fontSize);
-
-            if (textWidth <= maxWidth) {
-              currentLine = testLine;
-            } else {
-              if (currentLine) lines.push(currentLine);
-              currentLine = word;
+          for (const paragraph of paragraphs) {
+            if (!paragraph.trim()) {
+              lines.push(''); // Preserve empty lines
+              continue;
             }
+
+            // Split each paragraph into words and wrap
+            const words = paragraph.split(' ');
+            let currentLine = '';
+
+            for (const word of words) {
+              const testLine = currentLine ? `${currentLine} ${word}` : word;
+              const textWidth = selectedFont.widthOfTextAtSize(testLine, fontSize);
+
+              if (textWidth <= maxWidth) {
+                currentLine = testLine;
+              } else {
+                if (currentLine) lines.push(currentLine);
+                currentLine = word;
+              }
+            }
+            if (currentLine) lines.push(currentLine);
           }
-          if (currentLine) lines.push(currentLine);
 
           // Draw each line
           lines.forEach((line, index) => {
@@ -510,6 +528,50 @@ class PDFGenerationService {
     };
 
     return fieldMap[fieldName] || studentData[fieldName] || '';
+  }
+
+  /**
+   * Get segment-based field value (for dynamic result description segments)
+   * @param {string} fieldName - Base field name (e.g., 'result_description')
+   * @param {string} segmentKey - Segment key (e.g., 'introversion_i', 'power_match')
+   * @param {string} segmentPart - Part to extract ('key' or 'value')
+   * @param {object} studentData - Student data object
+   * @returns {string} Segment field value
+   */
+  getSegmentFieldValue(fieldName, segmentKey, segmentPart, studentData) {
+    console.log(`   🔍 Fetching segment field: ${fieldName}:${segmentKey}:${segmentPart}`);
+
+    // Get the base field value (the full description)
+    const baseValue = this.getFieldValue(fieldName, studentData);
+
+    if (!baseValue) {
+      console.log(`   ⚠️ No base value found for field: ${fieldName}`);
+      return '';
+    }
+
+    console.log(`   ✓ Base value found, length: ${baseValue.length} characters`);
+
+    // Parse the description to extract segments
+    const segments = parseDescription(baseValue);
+
+    console.log(`   ✓ Parsed ${Object.keys(segments).length} segments from description`);
+
+    if (Object.keys(segments).length === 0) {
+      console.log(`   ⚠️ No segments found in description`);
+      return '';
+    }
+
+    // Get the specific segment value
+    const segmentValue = getSegmentValue(segments, segmentKey, segmentPart);
+
+    if (!segmentValue) {
+      console.log(`   ⚠️ Segment not found: ${segmentKey}:${segmentPart}`);
+      return '';
+    }
+
+    console.log(`   ✓ Segment value found: "${segmentValue.substring(0, 50)}..."`);
+
+    return segmentValue;
   }
 
   /**

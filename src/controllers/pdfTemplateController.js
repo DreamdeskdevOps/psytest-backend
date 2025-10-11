@@ -1,6 +1,7 @@
 const { getOne, getMany, executeQuery } = require('../config/database');
 const fs = require('fs').promises;
 const path = require('path');
+const { parseDescription, generateFieldDefinitions } = require('../utils/descriptionSegmentParser');
 
 // Create new PDF template
 exports.createTemplate = async (req, res) => {
@@ -542,6 +543,87 @@ exports.getGenerationHistory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch generation history',
+      error: error.message
+    });
+  }
+};
+
+// Get segment fields for a specific test (for PDF template creation)
+exports.getSegmentFields = async (req, res) => {
+  try {
+    const { testId } = req.params;
+
+    console.log(`📋 Fetching segment fields for test: ${testId}`);
+
+    // Validate testId
+    if (!testId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Test ID is required'
+      });
+    }
+
+    // Fetch ONE sample result from this test
+    // Use ORDER BY created_at ASC LIMIT 1 to get first result (most stable for template creation)
+    const sampleResult = await getOne(`
+      SELECT id, result_code, title, description
+      FROM test_results
+      WHERE test_id = $1
+        AND description IS NOT NULL
+        AND description != ''
+        AND is_active = true
+      ORDER BY created_at ASC
+      LIMIT 1
+    `, [testId]);
+
+    if (!sampleResult) {
+      return res.status(404).json({
+        success: false,
+        message: 'No results with descriptions found for this test. Please add at least one result with a description first.'
+      });
+    }
+
+    console.log(`✅ Found sample result: ${sampleResult.result_code} - ${sampleResult.title}`);
+
+    // Parse the description to extract segment structure
+    const segments = parseDescription(sampleResult.description);
+
+    console.log(`📊 Parsed ${Object.keys(segments).length} segments from description`);
+
+    if (Object.keys(segments).length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No segments found in result description. The description may not be properly formatted with headings.'
+      });
+    }
+
+    // Generate field definitions for template creation
+    const sourceInfo = `Result: ${sampleResult.result_code}`;
+    const fields = generateFieldDefinitions(segments, sourceInfo);
+
+    console.log(`✅ Generated ${fields.length} field definitions`);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        category: 'Result Description Segments',
+        description: 'Dynamic content segments from test results - each segment has a key (heading) and value (content)',
+        fields: fields
+      },
+      metadata: {
+        totalSegments: Object.keys(segments).length,
+        totalFields: fields.length,
+        testId: testId,
+        sampleSource: sourceInfo,
+        note: 'Segment structure is same for all results in this test. Template will work for any result.'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching segment fields:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch segment fields',
       error: error.message
     });
   }

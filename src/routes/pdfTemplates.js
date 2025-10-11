@@ -43,6 +43,9 @@ router.get('/active', pdfTemplateController.getActiveTemplatesForDropdown);
 // Get available template fields
 router.get('/available-fields', pdfTemplateController.getAvailableFields);
 
+// Get segment fields for a specific test
+router.get('/segment-fields/:testId', pdfTemplateController.getSegmentFields);
+
 // Get PDF generation history
 router.get('/generation-history', pdfTemplateController.getGenerationHistory);
 
