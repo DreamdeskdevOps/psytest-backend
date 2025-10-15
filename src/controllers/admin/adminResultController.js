@@ -225,7 +225,7 @@ const createTestResult = async (req, res) => {
       result_code: result_code?.trim() || `R_${Date.now()}`,
       score_range: score_range?.trim() || null,
       title: title.trim(),
-      description: description?.trim() || null,
+      description: typeof description === 'string' ? (description.trim() || null) : (description ? JSON.stringify(description) : null),
       result_type
     };
 
@@ -307,7 +307,17 @@ const updateTestResult = async (req, res) => {
     }
     if (score_range !== undefined) updateData.score_range = score_range?.trim() || null;
     if (title !== undefined && title) updateData.title = typeof title === 'string' ? title.trim() : title;
-    if (description !== undefined) updateData.description = description?.trim() || null;
+    if (description !== undefined) {
+      // Handle description as string (can be JSON string or plain text)
+      if (typeof description === 'string') {
+        updateData.description = description.trim() || null;
+      } else if (typeof description === 'object') {
+        // If it's already an object, stringify it
+        updateData.description = JSON.stringify(description);
+      } else {
+        updateData.description = null;
+      }
+    }
     if (result_type !== undefined) updateData.result_type = result_type;
     if (is_active !== undefined) updateData.is_active = is_active;
 

@@ -67,8 +67,19 @@ class PDFGenerationService {
         throw new Error('Student test attempt data not found');
       }
 
-      // Merge with any additional studentData passed
+      // Merge with any additional studentData passed (studentData takes priority)
       const mergedData = { ...completeData, ...studentData };
+      
+      console.log('📊 Merged Data for PDF:', {
+        first_name: mergedData.first_name,
+        last_name: mergedData.last_name,
+        email: mergedData.email,
+        result_code: mergedData.result_code,
+        result_title: mergedData.result_title,
+        result_description_length: mergedData.result_description?.length || 0,
+        total_score: mergedData.total_score,
+        percentage: mergedData.percentage
+      });
 
       // Get the assigned PDF template for this test
       const templateInfo = await getOne(`
@@ -102,6 +113,16 @@ class PDFGenerationService {
 
       // Get all pages
       const pages = pdfDoc.getPages();
+      
+      // Store page rotations (DON'T reset them - we need to match text rotation to page rotation)
+      const pageRotations = {};
+      pages.forEach((page, index) => {
+        const currentRotation = page.getRotation().angle;
+        pageRotations[index] = currentRotation;
+        if (currentRotation !== 0) {
+          console.log(`📐 Page ${index + 1} has rotation: ${currentRotation}° - Text will be rotated to match`);
+        }
+      });
 
       // Load standard fonts
       const fonts = {
@@ -182,11 +203,16 @@ class PDFGenerationService {
         } else {
           value = this.getFieldValue(fieldName, mergedData);
         }
+        
+        console.log(`   🔍 Field: ${fieldName} → Value: ${value ? (String(value).substring(0, 50) + '...') : 'EMPTY'}`);
+        
+        if (!value) {
+          console.log(`   ❌ SKIPPING FIELD ${fieldName} - NO VALUE`);
+        }
 
         if (value) {
           const fontSize = field.fontSize || 14;
           const color = this.parseColor(field.fontColor || field.color || '#000000');
-          const rotation = field.rotation || 0;
           const fontWeight = field.fontWeight || 'normal';
           const fontFamily = field.fontFamily || 'Arial, sans-serif';
           const textAlign = field.textAlign || 'left';
@@ -201,6 +227,17 @@ class PDFGenerationService {
           if (!targetPage) {
             console.log(`   ⚠️ Page ${field.page} not found for field: ${fieldName}`);
             continue;
+          }
+
+          // CRITICAL FIX: Invert page rotation for text alignment
+          // If page is tilted left (positive), text needs to tilt right (negative) to appear straight
+          const pageRotation = pageRotations[pageIndex] || 0;
+          const fieldRotation = (field.rotation && Math.abs(field.rotation) > 0.1) ? field.rotation : 0;
+          // INVERT the page rotation and add field rotation
+          const rotation = -pageRotation + fieldRotation;
+          
+          if (rotation !== 0) {
+            console.log(`   📐 Applying rotation: ${rotation}° (page: ${pageRotation}°, inverted: ${-pageRotation}°, field: ${fieldRotation}°)`);
           }
 
           const { height } = targetPage.getSize();
@@ -223,18 +260,22 @@ class PDFGenerationService {
 
           // Replace special Unicode characters that WinAnsi encoding cannot handle
           cleanValue = cleanValue
-            .replace(/[\u2022\u2023\u2043\u2981\u25E6\u2219\u2218]/g, '-')  // Bullet points → dash
+            .replace(/\t/g, '  ')  // Replace tabs with 2 spaces (CRITICAL FIX)
+            .replace(/[\u2022\u2023\u2043\u2981\u25E6\u2219\u2218]/g, '• ')  // Keep bullet points as bullet + space
             .replace(/[\u2013\u2014]/g, '-')  // En/Em dashes → hyphen
             .replace(/[\u2018\u2019]/g, "'")  // Smart single quotes → apostrophe
             .replace(/[\u201C\u201D]/g, '"')  // Smart double quotes → straight quotes
             .replace(/[\u2026]/g, '...')      // Ellipsis → three dots
-            .replace(/[^\x00-\x7F]/g, '')     // Remove any remaining non-ASCII characters
+            .replace(/[^\x00-\xFF]/g, '')     // Remove characters outside Latin-1 range (keep bullet •)
 
           console.log(`   Writing text field: ${fieldName} at page ${field.page || 1}, (${field.x}, ${field.y}) - ${cleanValue.substring(0, 100)}...`);
 
           // Handle multi-line text with word wrapping
-          const maxWidth = field.maxWidth || 500; // Default max width
+          // Use field.width from template designer, fallback to maxWidth or default
+          const maxWidth = field.width || field.maxWidth || 500;
           const lineHeight = fontSize * 1.2; // Line spacing
+          
+          console.log(`   📏 Text box dimensions: width=${maxWidth}, height=${field.height || 'auto'}, fontSize=${fontSize}`);
 
           // First, split by newlines (for bullet lists and pre-formatted content)
           const paragraphs = cleanValue.split('\n');
@@ -264,8 +305,15 @@ class PDFGenerationService {
             if (currentLine) lines.push(currentLine);
           }
 
-          // Draw each line
-          lines.forEach((line, index) => {
+          // Draw each line (with height constraint if specified)
+          const maxLines = field.height ? Math.floor(field.height / lineHeight) : lines.length;
+          const linesToDraw = lines.slice(0, maxLines);
+          
+          if (lines.length > maxLines) {
+            console.log(`   ⚠️ Text truncated: ${lines.length} lines, showing ${maxLines} (height constraint: ${field.height}px)`);
+          }
+          
+          linesToDraw.forEach((line, index) => {
             const yPosition = height - field.y - (index * lineHeight);
             const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
 
@@ -365,8 +413,18 @@ class PDFGenerationService {
       const outputPath = path.join(outputDir, filename);
       const relativePath = `uploads/generated-pdfs/${filename}`;
 
+      console.log('💾 Saving PDF:', {
+        filename,
+        outputPath,
+        relativePath,
+        attemptId,
+        timestamp
+      });
+
       // Write PDF to file
       await fs.writeFile(outputPath, pdfBytes);
+      
+      console.log('✅ PDF file saved successfully:', relativePath);
 
       // Record generation in database
       await executeQuery(`
@@ -388,9 +446,18 @@ class PDFGenerationService {
         'success'
       ]);
 
+      console.log('📤 Returning PDF path:', relativePath);
       return relativePath;
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('❌ Error generating PDF:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      console.error('❌ Error details:', {
+        testId,
+        studentId,
+        attemptId,
+        hasStudentData: !!studentData,
+        studentDataKeys: studentData ? Object.keys(studentData) : []
+      });
 
       // Record failure in database
       try {
@@ -425,6 +492,12 @@ class PDFGenerationService {
    * @returns {*} Field value
    */
   getFieldValue(fieldName, studentData) {
+    // Check if this is a dynamic result field (result.field_name format)
+    if (fieldName.startsWith('result.')) {
+      const resultFieldKey = fieldName.substring(7); // Remove 'result.' prefix
+      return this.getResultField(studentData, resultFieldKey);
+    }
+    
     const fieldMap = {
       // Student information (from users table - exact column names)
       'first_name': studentData.first_name || studentData.firstName || '',
@@ -446,13 +519,51 @@ class PDFGenerationService {
       'address_state': this.getAddressField(studentData, 'state') || this.getAddressField(studentData, 'address_state') || '',
       'address_country': this.getAddressField(studentData, 'country') || this.getAddressField(studentData, 'address_country') || '',
 
-      // Backwards compatibility
+      // Backwards compatibility (camelCase versions)
+      'firstName': studentData.first_name || studentData.firstName || '',
+      'lastName': studentData.last_name || studentData.lastName || '',
+      'fullName': studentData.full_name || `${studentData.first_name || ''} ${studentData.last_name || ''}`.trim() || studentData.fullName || '',
       'studentName': studentData.studentName || studentData.fullName || `${studentData.first_name || ''} ${studentData.last_name || ''}`.trim() || '',
       'studentEmail': studentData.email || studentData.studentEmail || '',
       'studentId': studentData.studentId || studentData.student_id || studentData.id || '',
       'schoolName': this.getAddressField(studentData, 'school_name') || this.getAddressField(studentData, 'schoolName') || '',
       'studentClass': this.getAddressField(studentData, 'class') || studentData.class || studentData.grade || '',
       'rollNumber': this.getAddressField(studentData, 'roll_number') || this.getAddressField(studentData, 'rollNumber') || '',
+      'testTitle': studentData.testTitle || studentData.test_title || '',
+      'totalScore': studentData.totalScore || studentData.total_score || '',
+      'resultCode': studentData.resultCode || studentData.result_code || '',
+      'resultTitle': studentData.resultTitle || studentData.result_title || '',
+      
+      // Direct result field mappings (for templates that use field name without result. prefix)
+      // All 28 MBTI description fields
+      'codeheading': this.getResultField(studentData, 'codeheading'),
+      'intoduction_of_heading': this.getResultField(studentData, 'intoduction_of_heading'),
+      'power_match': this.getResultField(studentData, 'power_match'),
+      'description_power_match': this.getResultField(studentData, 'description_power_match'),
+      'code_1': this.getResultField(studentData, 'code_1'),
+      'code_1_description': this.getResultField(studentData, 'code_1_description'),
+      'code_2': this.getResultField(studentData, 'code_2'),
+      'code_2_descriptions': this.getResultField(studentData, 'code_2_descriptions'),
+      'code_3': this.getResultField(studentData, 'code_3'),
+      'code_3_descriptions': this.getResultField(studentData, 'code_3_descriptions'),
+      'code_4': this.getResultField(studentData, 'code_4'),
+      'code_4_descriptions': this.getResultField(studentData, 'code_4_descriptions'),
+      'what_makes_you_unique': this.getResultField(studentData, 'what_makes_you_unique'),
+      'what_makes_you_unique_descriptions': this.getResultField(studentData, 'what_makes_you_unique_descriptions'),
+      'superpowers_you_bring_to_the_table': this.getResultField(studentData, 'superpowers_you_bring_to_the_table'),
+      'superpowers_you_bring_to_the_table_description': this.getResultField(studentData, 'superpowers_you_bring_to_the_table_description'),
+      'growth_zones_for_you': this.getResultField(studentData, 'growth_zones_for_you'),
+      'growth_zones_for_you_description': this.getResultField(studentData, 'growth_zones_for_you_description'),
+      'how_you_connect_with_people': this.getResultField(studentData, 'how_you_connect_with_people'),
+      'how_you_connecy_with_people_description': this.getResultField(studentData, 'how_you_connecy_with_people_description'),
+      'work_environment_where_you_will_thrive': this.getResultField(studentData, 'work_environment_where_you_will_thrive'),
+      'work_environment_where_you_will_thrive_description': this.getResultField(studentData, 'work_environment_where_you_will_thrive_description'),
+      'dream_roles_and_ideal_tasks_for_you': this.getResultField(studentData, 'dream_roles_and_ideal_tasks_for_you'),
+      'dream_roles_and_ideal_tasks_for_you_description': this.getResultField(studentData, 'dream_roles_and_ideal_tasks_for_you_description'),
+      'ideal_careers': this.getResultField(studentData, 'ideal_careers'),
+      'ideal_careers_description': this.getResultField(studentData, 'ideal_careers_description'),
+      'big_picture_takeway': this.getResultField(studentData, 'big_picture_takeway'),
+      'big_picture_takeway_description': this.getResultField(studentData, 'big_picture_takeway_description'),
 
       // Test information (from tests table)
       'test_title': studentData.test_title || studentData.testTitle || '',
@@ -496,12 +607,12 @@ class PDFGenerationService {
       'result_code': studentData.result_code || studentData.resultCode || '',
       'component_name': studentData.component_name || studentData.componentName || '',
       'result_title': studentData.result_title || studentData.resultTitle || '',
-      'result_description': studentData.result_description || studentData.resultDescription || '',
+      'result_description': this.extractResultDescription(studentData) || '',
 
       // Backwards compatibility
       'resultCode': studentData.resultCode || studentData.result_code || '',
       'resultTitle': studentData.resultTitle || studentData.result_title || '',
-      'resultDescription': studentData.resultDescription || studentData.result_description || '',
+      'resultDescription': this.extractResultDescription(studentData) || '',
 
       // Certificate & Additional fields
       'certificate_id': studentData.certificate_id || studentData.certificateId || this.generateCertificateId(studentData) || '',
@@ -572,6 +683,143 @@ class PDFGenerationService {
     console.log(`   ✓ Segment value found: "${segmentValue.substring(0, 50)}..."`);
 
     return segmentValue;
+  }
+
+  /**
+   * Get individual result field from structured description
+   * @param {object} studentData - Student data object
+   * @param {string} fieldKey - Field key to extract (e.g., 'introversion_i', 'power_match')
+   * @returns {string} Field value
+   */
+  getResultField(studentData, fieldKey) {
+    console.log(`   🔍 getResultField called for: ${fieldKey}`);
+    const description = studentData.result_description || studentData.resultDescription || '';
+    
+    console.log(`   📄 Description type: ${typeof description}, length: ${description?.length || 0}`);
+    
+    if (!description) {
+      console.log(`   ❌ No description found`);
+      return '';
+    }
+    
+    // Parse description if it's a JSON string
+    let descriptionObj = description;
+    if (typeof description === 'string') {
+      try {
+        descriptionObj = JSON.parse(description);
+        console.log(`   ✓ Parsed as JSON, keys: ${Object.keys(descriptionObj).join(', ')}`);
+      } catch (e) {
+        // If it's not JSON (e.g., HTML string), return the full description as fallback
+        console.log(`   ℹ️ Description is not JSON (HTML), returning full description for field: ${fieldKey}`);
+        console.log(`   📝 Description preview: ${description.substring(0, 100)}...`);
+        return description;
+      }
+    }
+    
+    // Get the specific field
+    const field = descriptionObj[fieldKey];
+    if (!field) {
+      // Field doesn't exist - return full description as fallback
+      console.log(`   ℹ️ Field ${fieldKey} not found in structured description, returning full description`);
+      return typeof description === 'string' ? description : JSON.stringify(description);
+    }
+    
+    // Handle structured field format
+    if (typeof field === 'object') {
+      let text = '';
+      
+      // Add title if exists
+      if (field.title) {
+        text += `${field.title}\n\n`;
+      }
+      
+      // Add content
+      if (field.content) {
+        if (Array.isArray(field.content)) {
+          // Handle bullets or numbered lists
+          text += field.content.map((item, index) => {
+            if (field.type === 'numbered') {
+              return `${index + 1}. ${item}`;
+            } else {
+              return `• ${item}`; // Use bullet symbol instead of dash
+            }
+          }).join('\n');
+        } else {
+          // Handle text content
+          text += field.content;
+        }
+      }
+      
+      return text.trim();
+    }
+    
+    // Handle simple string value
+    return String(field);
+  }
+
+  /**
+   * Extract result description - handles both string and structured format
+   * @param {object} studentData - Student data object
+   * @returns {string} Extracted description
+   */
+  extractResultDescription(studentData) {
+    let description = studentData.result_description || studentData.resultDescription || '';
+    
+    if (!description) return '';
+    
+    // If it's a JSON string, try to parse it
+    if (typeof description === 'string') {
+      try {
+        const parsed = JSON.parse(description);
+        if (typeof parsed === 'object') {
+          description = parsed; // Use parsed object
+        } else {
+          return description; // Return as-is if not an object
+        }
+      } catch (e) {
+        // Not JSON, return as-is (HTML or plain text)
+        return description;
+      }
+    }
+    
+    // If it's an object (structured description), extract all content
+    if (typeof description === 'object') {
+      let fullText = '';
+      
+      // Iterate through all fields in the description object
+      for (const [key, value] of Object.entries(description)) {
+        if (value && typeof value === 'object') {
+          // Handle structured field with title and content
+          if (value.title) {
+            fullText += `${value.title}\n\n`;
+          }
+          
+          if (value.content) {
+            if (Array.isArray(value.content)) {
+              // Handle bullets or numbered lists
+              fullText += value.content.map((item, index) => {
+                if (value.type === 'numbered') {
+                  return `${index + 1}. ${item}`;
+                } else {
+                  return `• ${item}`; // Use bullet symbol instead of dash
+                }
+              }).join('\n');
+              fullText += '\n\n';
+            } else {
+              // Handle text content
+              fullText += `${value.content}\n\n`;
+            }
+          }
+        } else if (typeof value === 'string') {
+          // Handle simple string value
+          fullText += `${value}\n\n`;
+        }
+      }
+      
+      return fullText.trim();
+    }
+    
+    return String(description);
   }
 
   /**

@@ -54,6 +54,13 @@ const getTestDetails = async (testId, adminId) => {
         } catch (e) {
           return test.premium_features || [];
         }
+      })(),
+      description_fields: (() => {
+        try {
+          return test.description_fields && typeof test.description_fields === 'string' ? JSON.parse(test.description_fields) : (test.description_fields || []);
+        } catch (e) {
+          return test.description_fields || [];
+        }
       })()
     };
 
@@ -535,6 +542,74 @@ const reorderSections = async (testId, sectionOrders, adminId, ipAddress, userAg
   }
 };
 
+// Update description fields configuration for a test
+const updateDescriptionFields = async (testId, descriptionFields, adminId, ipAddress, userAgent) => {
+  try {
+    // Get test to verify it exists
+    const existingTest = await TestModel.getTestForAdmin(testId);
+    if (!existingTest) {
+      return generateResponse(false, 'Test not found', null, 404);
+    }
+
+    // Validate description fields
+    if (!Array.isArray(descriptionFields)) {
+      return generateResponse(false, 'Description fields must be an array', null, 400);
+    }
+
+    // Update test with new description fields
+    const { executeQuery } = require('../config/database');
+    await executeQuery(
+      'UPDATE tests SET description_fields = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [JSON.stringify(descriptionFields), testId]
+    );
+
+    return generateResponse(
+      true,
+      'Description fields updated successfully',
+      { descriptionFields },
+      200
+    );
+
+  } catch (error) {
+    console.error('Update description fields service error:', error);
+    return generateResponse(false, 'Failed to update description fields', null, 500);
+  }
+};
+
+// Get description fields configuration for a test
+const getDescriptionFields = async (testId, adminId) => {
+  try {
+    const test = await TestModel.getTestForAdmin(testId);
+    if (!test) {
+      return generateResponse(false, 'Test not found', null, 404);
+    }
+
+    // Parse description_fields
+    let descriptionFields = [];
+    if (test.description_fields) {
+      try {
+        descriptionFields = typeof test.description_fields === 'string'
+          ? JSON.parse(test.description_fields)
+          : test.description_fields;
+      } catch (e) {
+        console.error('Error parsing description_fields:', e);
+        descriptionFields = [];
+      }
+    }
+
+    return generateResponse(
+      true,
+      'Description fields retrieved successfully',
+      { descriptionFields },
+      200
+    );
+
+  } catch (error) {
+    console.error('Get description fields service error:', error);
+    return generateResponse(false, 'Failed to retrieve description fields', null, 500);
+  }
+};
+
 module.exports = {
   getAllTests,
   getTestDetails,
@@ -546,5 +621,7 @@ module.exports = {
   getTestPreview,
   bulkOperations,
   getTestAnalytics,
-  reorderSections
+  reorderSections,
+  updateDescriptionFields,
+  getDescriptionFields
 };

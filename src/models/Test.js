@@ -82,7 +82,7 @@ const getTestForAdmin = async (id) => {
       t.is_free, t.price, t.currency, t.discount_percentage, t.passing_score, t.max_attempts,
       t.show_results, t.show_correct_answers, t.randomize_questions,
       t.total_attempts, t.total_completions, t.average_score,
-      t.slug, t.tags, t.thumbnail, t.premium_features,
+      t.slug, t.tags, t.thumbnail, t.premium_features, t.description_fields,
       t.created_by, t.updated_by, t.created_at, t.updated_at,
 
       -- Complete section configuration for admin
@@ -116,8 +116,8 @@ const getTestForAdmin = async (id) => {
              t.total_questions, t.is_active, t.is_published, t.is_free, t.price, t.currency,
              t.discount_percentage, t.passing_score, t.max_attempts, t.show_results,
              t.show_correct_answers, t.randomize_questions, t.total_attempts, t.total_completions,
-             t.average_score, t.slug, t.tags, t.thumbnail, t.premium_features, t.created_by,
-             t.updated_by, t.created_at, t.updated_at
+             t.average_score, t.slug, t.tags, t.thumbnail, t.premium_features, t.description_fields,
+             t.created_by, t.updated_by, t.created_at, t.updated_at
   `;
   return await getOne(query, [id]);
 };

@@ -44,21 +44,21 @@ class ScoringConfiguration {
         try {
             const query = `
                 SELECT * FROM ${TABLE_NAME}
-                WHERE test_id = ? AND (section_id = ? OR (? IS NULL AND section_id IS NULL))
+                WHERE test_id = $1 AND (section_id = $2 OR ($2 IS NULL AND section_id IS NULL))
                 AND is_active = true
                 ORDER BY created_at DESC
                 LIMIT 1
             `;
 
             console.log('🔍 Executing getConfiguration query:', query);
-            console.log('📋 With parameters:', [testId, sectionId, sectionId]);
+            console.log('📋 With parameters:', [testId, sectionId]);
 
-            const [results] = await sequelize.query(query, {
-                replacements: [testId, sectionId, sectionId],
+            const results = await sequelize.query(query, {
+                replacements: [testId, sectionId],
                 type: sequelize.QueryTypes.SELECT
             });
 
-            const result = results ? results : null;
+            const result = results && results.length > 0 ? results[0] : null;
             console.log('📊 Configuration query result:', result);
 
             if (result) {
@@ -106,11 +106,11 @@ class ScoringConfiguration {
             const updateQuery = `
                 UPDATE ${TABLE_NAME}
                 SET
-                    scoring_type = ?,
-                    scoring_pattern = ?,
-                    updated_by = ?,
+                    scoring_type = $1,
+                    scoring_pattern = $2,
+                    updated_by = $3,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = $4
                 RETURNING *
             `;
 
@@ -137,11 +137,17 @@ class ScoringConfiguration {
             const insertQuery = `
                 INSERT INTO ${TABLE_NAME}
                 (test_id, section_id, scoring_type, scoring_pattern, created_by, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *
             `;
 
             console.log('💾 DEBUG: configData for insert:', configData);
+            console.log('💾 DEBUG: testId:', testId, 'type:', typeof testId);
+            console.log('💾 DEBUG: sectionId:', sectionId, 'type:', typeof sectionId);
+            console.log('💾 DEBUG: scoringType:', scoringType);
+            console.log('💾 DEBUG: scoringPattern:', scoringPattern);
+            console.log('💾 DEBUG: createdBy:', createdBy);
+            
             const replacements = [
                 testId,
                 sectionId,
@@ -150,11 +156,13 @@ class ScoringConfiguration {
                 createdBy,
                 createdBy
             ];
-            console.log('💾 DEBUG: replacements for insert:', replacements);
+            console.log('💾 DEBUG: replacements array:', replacements);
+            console.log('💾 DEBUG: replacements length:', replacements.length);
 
             const results = await sequelize.query(insertQuery, {
                 replacements: replacements,
-                type: sequelize.QueryTypes.SELECT
+                type: sequelize.QueryTypes.SELECT,
+                bind: replacements
             });
 
             const result = results[0];

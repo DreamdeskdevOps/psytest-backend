@@ -1436,19 +1436,67 @@ const submitTestAttempt = async (sessionToken) => {
         WHERE t.id = $2
       `, [attempt.user_id, attempt.test_id]);
 
+      console.log('🔍 PDF Generation Check:', {
+        hasTestInfo: !!testInfo,
+        hasPdfTemplate: !!testInfo?.pdf_template_id,
+        testTitle: testInfo?.title,
+        templateId: testInfo?.pdf_template_id
+      });
+
       // Only generate PDF if template is assigned
       if (testInfo && testInfo.pdf_template_id) {
         console.log('📄 PDF template assigned, generating personalized PDF...');
+        console.log('📊 Result data for PDF:', {
+          resultCode: scoreResult.resultCode,
+          resultTitle: scoreResult.resultTitle,
+          hasDescription: !!scoreResult.resultDescription,
+          descriptionType: typeof scoreResult.resultDescription,
+          descriptionPreview: typeof scoreResult.resultDescription === 'string' 
+            ? scoreResult.resultDescription.substring(0, 100)
+            : JSON.stringify(scoreResult.resultDescription).substring(0, 100)
+        });
 
         const pdfGenerationService = require('./pdfGenerationService');
 
-        // Prepare simple student data for PDF
+        // Prepare comprehensive student data for PDF
         const studentData = {
+          // Student info
+          first_name: testInfo.first_name || '',
+          last_name: testInfo.last_name || '',
+          full_name: `${testInfo.first_name || ''} ${testInfo.last_name || ''}`.trim() || 'Student',
           studentName: `${testInfo.first_name || ''} ${testInfo.last_name || ''}`.trim() || 'Student',
-          resultDescription: scoreResult.resultDescription || scoreResult.testResult?.description || '',
+          email: testInfo.email || '',
           studentEmail: testInfo.email || '',
+          
+          // Result info
+          result_code: scoreResult.resultCode || scoreResult.finalResultCode || '',
           resultCode: scoreResult.resultCode || scoreResult.finalResultCode || '',
-          resultTitle: scoreResult.resultTitle || scoreResult.testResult?.title || ''
+          result_title: scoreResult.resultTitle || scoreResult.testResult?.title || '',
+          resultTitle: scoreResult.resultTitle || scoreResult.testResult?.title || '',
+          result_description: scoreResult.resultDescription || scoreResult.testResult?.description || '',
+          resultDescription: scoreResult.resultDescription || scoreResult.testResult?.description || '',
+          
+          // Test info
+          test_title: testInfo.title || '',
+          testTitle: testInfo.title || '',
+          
+          // Score info
+          total_score: finalScore || 0,
+          totalScore: finalScore || 0,
+          percentage: percentageScore || 0,
+          percentageScore: percentageScore || 0,
+          overallScore: finalScore || 0,
+          
+          // Attempt info
+          attempt_id: attempt.id,
+          attemptId: attempt.id,
+          completed_at: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          completionDate: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
         };
 
         generatedPdfPath = await pdfGenerationService.generateStudentPDF(
@@ -1464,6 +1512,16 @@ const submitTestAttempt = async (sessionToken) => {
       }
     } catch (pdfError) {
       console.error('⚠️ PDF generation failed (continuing anyway):', pdfError.message);
+      console.error('⚠️ PDF Error stack:', pdfError.stack);
+      console.error('⚠️ PDF Error details:', {
+        attemptId: attempt.id,
+        testId: attempt.test_id,
+        userId: attempt.user_id,
+        hasResultData: !!scoreResult,
+        resultCode: scoreResult?.resultCode,
+        resultTitle: scoreResult?.resultTitle,
+        hasResultDescription: !!scoreResult?.resultDescription
+      });
       // Don't fail the entire submission if PDF generation fails
     }
 
@@ -1485,6 +1543,10 @@ const submitTestAttempt = async (sessionToken) => {
     console.log('📤 Sending response data:', {
       scoringType: responseData.scoringType,
       resultCode: responseData.resultCode,
+      pdfFile: responseData.pdfFile,
+      generatedPdfPath: responseData.generatedPdfPath,
+      hasPdfFile: !!responseData.pdfFile,
+      hasGeneratedPdf: !!responseData.generatedPdfPath,
       pdfFile: responseData.pdfFile,
       resultTitle: responseData.resultTitle
     });

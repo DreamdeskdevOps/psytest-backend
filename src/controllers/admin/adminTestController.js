@@ -543,6 +543,112 @@ const reorderSections = async (req, res) => {
   }
 };
 
+// PUT /api/admin/tests/:id/description-fields - Update description fields configuration
+const updateDescriptionFields = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { descriptionFields } = req.body;
+    const adminId = req.admin.id;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid test ID format',
+        data: null
+      });
+    }
+
+    // Validate description fields array
+    if (!Array.isArray(descriptionFields)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Description fields must be an array',
+        data: null
+      });
+    }
+
+    // Validate each field structure
+    for (const field of descriptionFields) {
+      if (!field.key || !field.label || !field.type) {
+        return res.status(400).json({
+          success: false,
+          message: 'Each field must have key, label, and type',
+          data: null
+        });
+      }
+
+      const validTypes = ['title', 'text', 'bullets', 'numbered'];
+      if (!validTypes.includes(field.type)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid field type. Allowed: ${validTypes.join(', ')}`,
+          data: null
+        });
+      }
+
+      if (typeof field.order !== 'number') {
+        return res.status(400).json({
+          success: false,
+          message: 'Field order must be a number',
+          data: null
+        });
+      }
+    }
+
+    const result = await adminTestService.updateDescriptionFields(id, descriptionFields, adminId, ipAddress, userAgent);
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Update description fields controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
+// GET /api/admin/tests/:id/description-fields - Get description fields configuration
+const getDescriptionFields = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.admin.id;
+
+    // Validate UUID
+    if (!validateUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid test ID format',
+        data: null
+      });
+    }
+
+    const result = await adminTestService.getDescriptionFields(id, adminId);
+
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Get description fields controller error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      data: null
+    });
+  }
+};
+
 module.exports = {
   getAllTests,
   getTestDetails,
@@ -554,5 +660,7 @@ module.exports = {
   getTestPreview,
   bulkActions,
   exportTest,
-  reorderSections
+  reorderSections,
+  updateDescriptionFields,
+  getDescriptionFields
 };

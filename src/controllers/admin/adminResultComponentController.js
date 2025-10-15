@@ -196,7 +196,7 @@ const createResultComponent = async (req, res) => {
       test_id,
       component_code: component_code.trim().toUpperCase(),
       component_name: component_name.trim(),
-      description: description?.trim() || null,
+      description: typeof description === 'string' ? (description.trim() || null) : (description ? JSON.stringify(description) : null),
       score_value: parseInt(score_value),
       order_priority: parseInt(order_priority),
       component_category: component_category?.trim() || null,
@@ -250,7 +250,17 @@ const updateResultComponent = async (req, res) => {
     const updateData = {};
     if (component_code !== undefined) updateData.component_code = component_code.trim().toUpperCase();
     if (component_name !== undefined) updateData.component_name = component_name.trim();
-    if (description !== undefined) updateData.description = description?.trim() || null;
+    if (description !== undefined) {
+      // Handle description as string (can be JSON string or plain text)
+      if (typeof description === 'string') {
+        updateData.description = description.trim() || null;
+      } else if (typeof description === 'object') {
+        // If it's already an object, stringify it
+        updateData.description = JSON.stringify(description);
+      } else {
+        updateData.description = null;
+      }
+    }
     if (score_value !== undefined) {
       if (isNaN(score_value)) {
         return res.status(400).json({

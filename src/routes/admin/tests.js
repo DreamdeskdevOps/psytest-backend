@@ -77,9 +77,19 @@ router.get('/:id/export',
 );
 
 // PUT /api/v1/admin/tests/:id/reorder-sections - Reorder test sections
-router.put('/:id/reorder-sections', 
- 
+router.put('/:id/reorder-sections',
+
   adminTestController.reorderSections
+);
+
+// PUT /api/v1/admin/tests/:id/description-fields - Update description fields configuration
+router.put('/:id/description-fields',
+  adminTestController.updateDescriptionFields
+);
+
+// GET /api/v1/admin/tests/:id/description-fields - Get description fields configuration
+router.get('/:id/description-fields',
+  adminTestController.getDescriptionFields
 );
 
 module.exports = router;
