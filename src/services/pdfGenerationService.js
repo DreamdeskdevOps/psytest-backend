@@ -148,12 +148,24 @@ class PDFGenerationService {
 
         fonts['NexusRustSans'] = await pdfDoc.embedFont(nexaRustBytes, { subset: true });
         console.log('✓ Custom font NexaRustSans loaded successfully with fontkit');
+
+        // Load FuturaCyrillicMedium font (default)
+        const futuraCyrillicPath = path.join(__dirname, '../../fonts/FuturaCyrillicMedium.ttf');
+        const futuraCyrillicBytes = await fs.readFile(futuraCyrillicPath);
+        fonts['FuturaCyrillic'] = await pdfDoc.embedFont(futuraCyrillicBytes, { subset: true });
+        console.log('✓ Custom font FuturaCyrillicMedium loaded successfully');
+
+        // Load FuturaCyrillicLight font
+        const futuraCyrillicLightPath = path.join(__dirname, '../../fonts/FuturaCyrillicLight.ttf');
+        const futuraCyrillicLightBytes = await fs.readFile(futuraCyrillicLightPath);
+        fonts['FuturaCyrillicLight'] = await pdfDoc.embedFont(futuraCyrillicLightBytes, { subset: true });
+        console.log('✓ Custom font FuturaCyrillicLight loaded successfully');
       } catch (error) {
-        console.error('⚠️ Could not load NexaRustSans font:');
+        console.error('⚠️ Could not load custom fonts:');
         console.error('   Error message:', error.message);
         console.error('   Error stack:', error.stack);
-        console.warn('   Please place NexaRustSans-Trial-Black2.ttf in /fonts/ directory');
-        console.warn('   Font will fallback to Helvetica');
+        console.warn('   Please place font files in /fonts/ directory');
+        console.warn('   Fonts will fallback to Helvetica');
       }
 
       // Default fonts for backwards compatibility
@@ -214,7 +226,7 @@ class PDFGenerationService {
           const fontSize = field.fontSize || 14;
           const color = this.parseColor(field.fontColor || field.color || '#000000');
           const fontWeight = field.fontWeight || 'normal';
-          const fontFamily = field.fontFamily || 'Arial, sans-serif';
+          const fontFamily = field.fontFamily || "'FuturaCyrillic', sans-serif";
           const textAlign = field.textAlign || 'left';
 
           // Select appropriate font based on family and weight
@@ -260,12 +272,12 @@ class PDFGenerationService {
           // Replace special Unicode characters that WinAnsi encoding cannot handle
           cleanValue = cleanValue
             .replace(/\t/g, '  ')  // Replace tabs with 2 spaces (CRITICAL FIX)
-            .replace(/[\u2022\u2023\u2043\u2981\u25E6\u2219\u2218]/g, '• ')  // Keep bullet points as bullet + space
+            .replace(/[\u2022\u2023\u2043\u2981\u25E6\u2219\u2218]/g, '- ')  // Convert bullets to hyphen (WinAnsi compatible)
             .replace(/[\u2013\u2014]/g, '-')  // En/Em dashes → hyphen
             .replace(/[\u2018\u2019]/g, "'")  // Smart single quotes → apostrophe
             .replace(/[\u201C\u201D]/g, '"')  // Smart double quotes → straight quotes
             .replace(/[\u2026]/g, '...')      // Ellipsis → three dots
-            .replace(/[^\x00-\xFF]/g, '')     // Remove characters outside Latin-1 range (keep bullet •)
+            .replace(/[^\x00-\xFF]/g, '')     // Remove characters outside Latin-1 range
 
           console.log(`   Writing text field: ${fieldName} at page ${field.page || 1}, (${field.x}, ${field.y}) - ${cleanValue.substring(0, 100)}...`);
 
@@ -737,10 +749,13 @@ class PDFGenerationService {
         if (Array.isArray(field.content)) {
           // Handle bullets or numbered lists
           text += field.content.map((item, index) => {
+            // Clean the item first (remove any existing bullets/hyphens at start)
+            const cleanItem = String(item).trim().replace(/^[•\-\*]\s*/, '');
+            
             if (field.type === 'numbered') {
-              return `${index + 1}. ${item}`;
+              return `${index + 1}. ${cleanItem}`;
             } else {
-              return `• ${item}`; // Use bullet symbol instead of dash
+              return `- ${cleanItem}`; // Use hyphen (WinAnsi compatible)
             }
           }).join('\n');
         } else {
@@ -797,10 +812,13 @@ class PDFGenerationService {
             if (Array.isArray(value.content)) {
               // Handle bullets or numbered lists
               fullText += value.content.map((item, index) => {
+                // Clean the item first (remove any existing bullets/hyphens at start)
+                const cleanItem = String(item).trim().replace(/^[•\-\*]\s*/, '');
+                
                 if (value.type === 'numbered') {
-                  return `${index + 1}. ${item}`;
+                  return `${index + 1}. ${cleanItem}`;
                 } else {
-                  return `• ${item}`; // Use bullet symbol instead of dash
+                  return `- ${cleanItem}`; // Use hyphen (WinAnsi compatible)
                 }
               }).join('\n');
               fullText += '\n\n';
@@ -919,6 +937,10 @@ class PDFGenerationService {
     if (fontFamily.includes('NexaRustSans') || fontFamily.includes('NexusRustSans') ||
         fontFamily.includes('Nexa Rust') || fontFamily.includes('Nexus Rust')) {
       return fonts['NexusRustSans'] || fonts['Helvetica']; // Fallback to Helvetica if not loaded
+    } else if (fontFamily.includes('FuturaCyrillicLight') || fontFamily.includes('Futura Cyrillic Light')) {
+      return fonts['FuturaCyrillicLight'] || fonts['Helvetica']; // Light weight
+    } else if (fontFamily.includes('FuturaCyrillic') || fontFamily.includes('Futura Cyrillic')) {
+      return fonts['FuturaCyrillic'] || fonts['Helvetica']; // Medium weight (default)
     } else if (fontFamily.includes('Times') || fontFamily.includes('serif')) {
       return isBold ? fonts['Times-Bold'] : fonts['Times-Roman'];
     } else if (fontFamily.includes('Courier') || fontFamily.includes('monospace')) {
