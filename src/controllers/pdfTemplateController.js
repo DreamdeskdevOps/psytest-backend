@@ -223,13 +223,13 @@ exports.updateTemplate = async (req, res) => {
     `;
 
     const result = await getOne(updateQuery, [
-      template_name,
-      template_description,
-      template_type,
-      pdf_file_path,
+      template_name || null,
+      template_description || null,
+      template_type || null,
+      pdf_file_path || null,
       template_config ? JSON.stringify(template_config) : null,
-      is_default,
-      is_active,
+      is_default !== undefined ? is_default : null,
+      is_active !== undefined ? is_active : null,
       templateId
     ]);
 

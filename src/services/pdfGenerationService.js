@@ -229,12 +229,11 @@ class PDFGenerationService {
             continue;
           }
 
-          // CRITICAL FIX: Invert page rotation for text alignment
-          // If page is tilted left (positive), text needs to tilt right (negative) to appear straight
+          // Apply field rotation (invert the sign so positive rotates right)
           const pageRotation = pageRotations[pageIndex] || 0;
           const fieldRotation = (field.rotation && Math.abs(field.rotation) > 0.1) ? field.rotation : 0;
-          // INVERT the page rotation and add field rotation
-          const rotation = -pageRotation + fieldRotation;
+          // INVERT field rotation: admin sets +2 (right), we apply -2 to PDF
+          const rotation = -fieldRotation;
           
           if (rotation !== 0) {
             console.log(`   📐 Applying rotation: ${rotation}° (page: ${pageRotation}°, inverted: ${-pageRotation}°, field: ${fieldRotation}°)`);
@@ -333,8 +332,8 @@ class PDFGenerationService {
               color: rgb(color.r, color.g, color.b)
             };
 
-            // Only add rotation if it's non-zero
-            if (rotation && rotation !== 0 && index === 0) {
+            // Apply rotation to ALL lines, not just the first one
+            if (rotation && rotation !== 0) {
               const { degrees } = require('pdf-lib');
               drawOptions.rotate = degrees(rotation);
             }

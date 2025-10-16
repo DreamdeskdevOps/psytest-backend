@@ -164,60 +164,10 @@ const updateTest = async (testId, updateData, adminId, ipAddress, userAgent) => 
       );
       console.log(`📄 Unassigned template ${updateData.pdf_template_id} from other tests before assigning to test ${testId}`);
 
-      // Check if template changed for this test
+      // Template changed - PDFs will be generated when students complete the test
       if (existingTest.pdf_template_id !== updateData.pdf_template_id) {
         console.log(`🔄 Template changed from ${existingTest.pdf_template_id} to ${updateData.pdf_template_id}`);
-        console.log(`🔄 Will regenerate PDFs for all completed attempts of this test...`);
-
-        // Get all completed attempts for this test
-        const completedAttempts = await getMany(`
-          SELECT ta.id, ta.user_id, ta.section_scores
-          FROM test_attempts ta
-          WHERE ta.test_id = $1 AND ta.status = 'completed'
-        `, [testId]);
-
-        console.log(`📊 Found ${completedAttempts.length} completed attempts to regenerate`);
-
-        // Regenerate PDFs for all completed attempts
-        if (completedAttempts.length > 0) {
-          const pdfGenerationService = require('./pdfGenerationService');
-          const { getOne } = require('../config/database');
-
-          for (const attempt of completedAttempts) {
-            try {
-              // Get user details
-              const user = await getOne(`
-                SELECT first_name, last_name, email FROM users WHERE id = $1
-              `, [attempt.user_id]);
-
-              if (!user) continue;
-
-              // Extract result data from section_scores
-              const sectionScores = attempt.section_scores || {};
-              const studentData = {
-                studentName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Student',
-                studentEmail: user.email || '',
-                resultCode: sectionScores.resultCode || '',
-                resultTitle: sectionScores.resultTitle || '',
-                resultDescription: sectionScores.resultDescription || ''
-              };
-
-              // Regenerate PDF with new template
-              await pdfGenerationService.generateStudentPDF(
-                testId,
-                attempt.user_id,
-                attempt.id,
-                studentData
-              );
-
-              console.log(`✅ Regenerated PDF for attempt ${attempt.id.substring(0, 8)}...`);
-            } catch (pdfError) {
-              console.error(`⚠️ Failed to regenerate PDF for attempt ${attempt.id}:`, pdfError.message);
-            }
-          }
-
-          console.log(`🎉 PDF regeneration complete for test ${testId}`);
-        }
+        console.log(`ℹ️  PDFs will be generated when students complete the test (not regenerating old PDFs)`);
       }
     }
 
