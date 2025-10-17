@@ -358,10 +358,18 @@ class PDFGenerationService {
       }
 
       // Process image fields (e.g., student photo, signature, QR code)
+      console.log(`\n🖼️ Processing ${imageFields.length} image fields...`);
       for (const field of imageFields) {
         // Support both 'name' (new format) and 'fieldName' (old format)
         const fieldName = field.name || field.fieldName;
+        console.log(`\n   📸 Image Field: ${fieldName}`);
+        console.log(`      Placeholder: ${field.placeholder}`);
+        console.log(`      Position: (${field.x}, ${field.y})`);
+        console.log(`      Size: ${field.width}x${field.height}`);
+        console.log(`      Page: ${field.page || 1}`);
+        
         const imageData = this.getFieldValue(fieldName, mergedData);
+        console.log(`      Image Data: ${imageData ? imageData.substring(0, 100) + '...' : 'EMPTY/NULL'}`);
 
         if (imageData) {
           try {
@@ -378,36 +386,102 @@ class PDFGenerationService {
 
             // Load image (support both file paths and base64)
             let imageBytes;
+            let imagePath;
             if (imageData.startsWith('data:image')) {
               // Base64 data URL
+              console.log(`      Loading from base64 data URL...`);
               const base64Data = imageData.split(',')[1];
               imageBytes = Buffer.from(base64Data, 'base64');
             } else {
               // File path
-              const imagePath = path.join(__dirname, '../../', imageData);
+              imagePath = path.join(__dirname, '../../', imageData);
+              console.log(`      Loading from file: ${imagePath}`);
+              
+              // Check if file exists
+              try {
+                await fs.access(imagePath);
+                console.log(`      ✅ File exists!`);
+              } catch (err) {
+                console.log(`      ❌ File NOT found: ${imagePath}`);
+                throw new Error(`Image file not found: ${imagePath}`);
+              }
+              
               imageBytes = await fs.readFile(imagePath);
+              console.log(`      ✅ File loaded, size: ${imageBytes.length} bytes`);
             }
 
             // Embed image based on type
             let image;
             if (imageData.includes('png') || imageData.startsWith('data:image/png')) {
+              console.log(`      Embedding as PNG...`);
               image = await pdfDoc.embedPng(imageBytes);
             } else {
+              console.log(`      Embedding as JPG...`);
               image = await pdfDoc.embedJpg(imageBytes);
             }
 
             const imgWidth = field.width || 100;
             const imgHeight = field.height || 100;
 
-            targetPage.drawImage(image, {
-              x: field.x,
-              y: height - field.y - imgHeight,
+            // Apply field rotation (invert the sign so positive rotates right)
+            const fieldRotation = (field.rotation && Math.abs(field.rotation) > 0.1) ? field.rotation : 0;
+            // INVERT field rotation: admin sets +2 (right), we apply -2 to PDF
+            const rotation = -fieldRotation;
+            
+            if (rotation !== 0) {
+              console.log(`      📐 Applying rotation: ${rotation}° (field: ${fieldRotation}°, inverted)`);
+            }
+
+            // Calculate position - for rotated images, we need to adjust the position
+            // to rotate around the center instead of top-left corner
+            let drawX = field.x;
+            let drawY = height - field.y - imgHeight;
+
+            const drawOptions = {
+              x: drawX,
+              y: drawY,
               width: imgWidth,
               height: imgHeight
-            });
+            };
+
+            // Apply rotation if specified - rotate around center of image
+            if (rotation && rotation !== 0) {
+              const { degrees } = require('pdf-lib');
+              
+              // Calculate center point of the image
+              const centerX = drawX + (imgWidth / 2);
+              const centerY = drawY + (imgHeight / 2);
+              
+              // Set rotation with center point
+              drawOptions.rotate = degrees(rotation);
+              
+              // Adjust position to rotate around center
+              // When rotating, PDF-lib rotates around top-left, so we need to compensate
+              const radians = (rotation * Math.PI) / 180;
+              const cos = Math.cos(radians);
+              const sin = Math.sin(radians);
+              
+              // Calculate offset to center rotation
+              const offsetX = (imgWidth / 2) * (1 - cos) + (imgHeight / 2) * sin;
+              const offsetY = (imgHeight / 2) * (1 - cos) - (imgWidth / 2) * sin;
+              
+              drawOptions.x = drawX + offsetX;
+              drawOptions.y = drawY + offsetY;
+              
+              console.log(`      Rotation center: (${centerX}, ${centerY}), offset: (${offsetX.toFixed(2)}, ${offsetY.toFixed(2)})`);
+            }
+
+            console.log(`      Drawing image at (${drawOptions.x.toFixed(2)}, ${drawOptions.y.toFixed(2)})${rotation ? ` with rotation ${rotation}°` : ''}`);
+            targetPage.drawImage(image, drawOptions);
+            
+            console.log(`      ✅ Image embedded successfully!`);
           } catch (imgError) {
-            console.error(`Error embedding image for field ${fieldName}:`, imgError);
+            console.error(`      ❌ Error embedding image for field ${fieldName}:`, imgError.message);
+            console.error(`      Stack:`, imgError.stack);
           }
+        } else {
+          console.log(`      ⚠️ No image data found for field: ${fieldName}`);
+          console.log(`      Skipping this image field...`);
         }
       }
 
@@ -544,6 +618,12 @@ class PDFGenerationService {
       'totalScore': studentData.totalScore || studentData.total_score || '',
       'resultCode': studentData.resultCode || studentData.result_code || '',
       'resultTitle': studentData.resultTitle || studentData.result_title || '',
+      
+      // Image fields (handle both naming conventions)
+      'vibe_match_image': this.getResultField(studentData, 'vibe_match_image') || this.getResultField(studentData, 'vibematchimage'),
+      'vibematchimage': this.getResultField(studentData, 'vibematchimage') || this.getResultField(studentData, 'vibe_match_image'),
+      'doll_image': this.getResultField(studentData, 'doll_image') || this.getResultField(studentData, 'dollimage'),
+      'dollimage': this.getResultField(studentData, 'dollimage') || this.getResultField(studentData, 'doll_image'),
       
       // Direct result field mappings (for templates that use field name without result. prefix)
       // All 28 MBTI description fields
@@ -737,6 +817,15 @@ class PDFGenerationService {
     
     // Handle structured field format
     if (typeof field === 'object') {
+      // For image fields, return the content directly (image path)
+      if (field.type === 'image') {
+        console.log(`   🖼️ Image field detected: ${fieldKey}`);
+        console.log(`      Type: ${field.type}`);
+        console.log(`      Content: ${field.content || '(empty)'}`);
+        console.log(`      Returning: ${field.content || '(empty string)'}`);
+        return field.content || '';
+      }
+      
       let text = '';
       
       // Add title if exists

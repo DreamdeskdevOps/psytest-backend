@@ -277,4 +277,126 @@ router.post('/cleanup', authenticateAdmin, async (req, res) => {
   }
 });
 
+// ========== RESULT IMAGE UPLOAD ROUTES ==========
+
+// Configure multer for result images (disk storage)
+const resultImageStorage = multer.diskStorage({
+  destination: async function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../../../uploads/result-images');
+    
+    // Ensure directory exists
+    try {
+      await fs.mkdir(uploadDir, { recursive: true });
+    } catch (error) {
+      console.error('Error creating upload directory:', error);
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    const nameWithoutExt = path.basename(file.originalname, ext);
+    const sanitizedName = nameWithoutExt.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    cb(null, sanitizedName + '-' + uniqueSuffix + ext);
+  }
+});
+
+const resultImageUpload = multer({
+  storage: resultImageStorage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPG, JPEG and PNG are allowed.'), false);
+    }
+  },
+  limits: {
+    fileSize: 2 * 1024 * 1024 // 2MB max
+  }
+});
+
+// POST /api/v1/admin/files/upload-result-image - Upload result image
+router.post('/upload-result-image', authenticateAdmin, resultImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    // Return relative path from backend root
+    const relativePath = `uploads/result-images/${req.file.filename}`;
+    
+    console.log('✅ Result image uploaded:', relativePath);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Image uploaded successfully',
+      data: {
+        path: relativePath,
+        filename: req.file.filename,
+        size: req.file.size,
+        mimetype: req.file.mimetype
+      }
+    });
+
+  } catch (error) {
+    console.error('Result image upload error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to upload image',
+      error: error.message
+    });
+  }
+});
+
+// DELETE /api/v1/admin/files/delete-result-image - Delete result image
+router.delete('/delete-result-image', authenticateAdmin, async (req, res) => {
+  try {
+    const { path: imagePath } = req.body;
+
+    if (!imagePath) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image path is required'
+      });
+    }
+
+    // Construct full path
+    const fullPath = path.join(__dirname, '../../../', imagePath);
+
+    // Check if file exists
+    try {
+      await fs.access(fullPath);
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        message: 'Image file not found'
+      });
+    }
+
+    // Delete file
+    await fs.unlink(fullPath);
+
+    console.log('✅ Result image deleted:', imagePath);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Image deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Result image delete error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete image',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

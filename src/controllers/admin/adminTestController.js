@@ -580,7 +580,7 @@ const updateDescriptionFields = async (req, res) => {
         });
       }
 
-      const validTypes = ['title', 'text', 'bullets', 'numbered'];
+      const validTypes = ['title', 'text', 'bullets', 'numbered', 'image'];
       if (!validTypes.includes(field.type)) {
         return res.status(400).json({
           success: false,
