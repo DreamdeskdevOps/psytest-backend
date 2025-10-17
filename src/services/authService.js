@@ -57,9 +57,9 @@ class AuthService {
 
   // Register user with OTP verification
   async registerUser(userData) {
-    const { firstName, lastName, email, password, phoneNumber, otpCode, age, gender, schoolName, class: className } = userData;
+    const { firstName, lastName, email, password, phoneNumber, otpCode, age, gender, dateOfBirth, schoolName, class: className } = userData;
 
-    console.log('Registering user with data:', { firstName, lastName, email, phoneNumber, otpCode });
+    console.log('Registering user with data:', { firstName, lastName, email, phoneNumber, dateOfBirth, otpCode });
 
     // Verify OTP
     const otpVerification = await OTP.verify(phoneNumber, otpCode, 'registration');
@@ -85,6 +85,7 @@ class AuthService {
       phoneNumber,
       age,
       gender,
+      dateOfBirth,
       schoolName,
       class: className
     });

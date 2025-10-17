@@ -15,6 +15,7 @@ class User {
       phoneNumber,
       age,
       gender,
+      dateOfBirth,
       schoolName,
       class: className,
       avatar = null,
@@ -23,10 +24,10 @@ class User {
 
     const query = `
       INSERT INTO ${this.tableName} (
-        first_name, last_name, email, password, phone_number, age, gender, school_name, class,
+        first_name, last_name, email, password, phone_number, age, gender, date_of_birth, school_name, class,
         avatar, address, is_email_verified
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING id, first_name, last_name, email, phone_number, 
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING id, first_name, last_name, email, phone_number, date_of_birth,
                 is_email_verified, subscription_type, created_at
     `;
 
@@ -38,6 +39,7 @@ class User {
       phoneNumber,
       age,
       gender,
+      dateOfBirth,
       schoolName,
       className,
       avatar,
