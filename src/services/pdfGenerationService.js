@@ -3,6 +3,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const { getOne, executeQuery } = require('../config/database');
 const { parseDescription, getSegmentValue } = require('../utils/descriptionSegmentParser');
+const pdfEncryptionService = require('./pdfEncryptionService');
+const emailService = require('./emailService');
 
 /**
  * PDF Generation Service
@@ -508,10 +510,99 @@ class PDFGenerationService {
 
       // Write PDF to file
       await fs.writeFile(outputPath, pdfBytes);
-      
+
       console.log('✅ PDF file saved successfully:', relativePath);
 
-      // Record generation in database
+      // 🔐 ENCRYPT PDF (in-place) if encryption is enabled
+      let isEncrypted = false;
+      let pdfPassword = null;
+      let emailSent = false;
+
+      if (pdfEncryptionService.isEncryptionEnabled() && completeData.date_of_birth) {
+        console.log('🔐 PDF encryption enabled, attempting to encrypt...');
+
+        // Generate password from date of birth
+        pdfPassword = pdfEncryptionService.formatDOBPassword(completeData.date_of_birth);
+
+        if (pdfPassword) {
+          try {
+            // Encrypt PDF IN-PLACE (replaces the original file with encrypted version)
+            // This is CRITICAL - we use the SAME path to avoid conflicts
+            await pdfEncryptionService.encryptPDF(outputPath, pdfPassword);
+            isEncrypted = true;
+            console.log('✅ PDF encrypted successfully with password');
+
+            // 📧 Send email with encrypted PDF if email is available
+            // IMPORTANT: Send email asynchronously (fire-and-forget)
+            // Don't await - let it run in background so it doesn't block PDF generation
+            if (completeData.email) {
+              console.log('📧 Scheduling result email to be sent in background...');
+
+              // Fire and forget - don't wait for email to complete
+              emailService.sendResultEmail(
+                completeData,
+                outputPath,
+                pdfPassword
+              ).then((result) => {
+                if (result) {
+                  console.log('✅ Background: Email sent successfully to:', completeData.email);
+                  emailSent = true;
+                  // Update database with email status
+                  executeQuery(`
+                    UPDATE pdf_generation_history
+                    SET email_sent = true
+                    WHERE attempt_id = $1
+                  `, [attemptId]).catch(err => console.error('Failed to update email status:', err));
+                } else {
+                  console.log('⚠️ Background: Email sending returned false');
+                }
+              }).catch((emailError) => {
+                console.error('⚠️ Background: Email sending failed:', emailError.message);
+                console.error('   PDF is still available for download');
+              });
+
+              console.log('✅ Email scheduled - continuing with PDF generation');
+            } else {
+              console.log('ℹ️ No email address available, skipping email delivery');
+            }
+          } catch (encryptError) {
+            console.error('⚠️ PDF encryption failed:', encryptError.message);
+            console.error('   PDF will be saved without encryption');
+            isEncrypted = false;
+          }
+        } else {
+          console.log('⚠️ Could not generate password from date of birth');
+        }
+      } else {
+        if (!pdfEncryptionService.isEncryptionEnabled()) {
+          console.log('ℹ️ PDF encryption is disabled in environment');
+        } else if (!completeData.date_of_birth) {
+          console.log('ℹ️ No date of birth available for password generation');
+        }
+      }
+
+      // ✅ UPDATE test_attempts TABLE (CRITICAL for download button to work!)
+      console.log('📝 Updating test_attempts table with PDF path...');
+      try {
+        await executeQuery(`
+          UPDATE test_attempts
+          SET pdf_file_path = $1,
+              pdf_generated = true,
+              updated_at = NOW()
+          WHERE id = $2
+        `, [relativePath, attemptId]);
+
+        console.log('✅ test_attempts table updated:', {
+          attempt_id: attemptId,
+          pdf_file_path: relativePath,
+          pdf_generated: true
+        });
+      } catch (updateError) {
+        console.error('❌ Failed to update test_attempts table:', updateError.message);
+        console.error('   This may cause the download button to not appear!');
+      }
+
+      // 📝 Record generation in database with encryption status
       await executeQuery(`
         INSERT INTO pdf_generation_history (
           template_id,
@@ -520,18 +611,29 @@ class PDFGenerationService {
           attempt_id,
           pdf_file_path,
           generation_status,
+          is_encrypted,
+          email_sent,
           generated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
       `, [
         templateInfo.template_id,
         testId,
         studentId,
         attemptId,
         relativePath,
-        'success'
+        'success',
+        isEncrypted,
+        emailSent
       ]);
 
       console.log('📤 Returning PDF path:', relativePath);
+      console.log('📊 PDF Generation Summary:', {
+        path: relativePath,
+        encrypted: isEncrypted,
+        emailSent: emailSent,
+        password: pdfPassword ? '(set)' : '(none)'
+      });
+
       return relativePath;
     } catch (error) {
       console.error('❌ Error generating PDF:', error.message);
