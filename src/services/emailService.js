@@ -1,16 +1,16 @@
 const nodemailer = require('nodemailer');
-const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL, FROM_NAME } = process.env;
+const fs = require('fs').promises;
 
-// Create a transporter object using the default SMTP transport
-const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: false, // true for 465, false for other ports
+class EmailService {
+  constructor() {
+    this.transporter = null;
+    this.initializeTransporter();
+  }
     auth: {
         user: SMTP_USER,
         pass: SMTP_PASS,
     },
-});
+};
 
 // Function to send an email
 const sendEmail = async (to, subject, text, html) => {

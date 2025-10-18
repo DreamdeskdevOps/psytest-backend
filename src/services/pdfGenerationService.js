@@ -729,7 +729,27 @@ class PDFGenerationService {
       'schoolLogo': studentData.schoolLogo || studentData.school_logo || ''
     };
 
-    return fieldMap[fieldName] || studentData[fieldName] || '';
+    // First check the fieldMap (for standard fields like name, age, etc.)
+    const mappedValue = fieldMap[fieldName];
+    if (mappedValue !== undefined && mappedValue !== '') {
+      return mappedValue;
+    }
+    
+    // Then check direct studentData property
+    if (studentData[fieldName] !== undefined && studentData[fieldName] !== '') {
+      return studentData[fieldName];
+    }
+    
+    // 🔥 DYNAMIC FALLBACK: Check if field exists in result description
+    // This makes it work for ALL test types (MBTI, SMT, etc.)
+    // Only used as fallback when field not found in standard mappings
+    const resultFieldValue = this.getResultField(studentData, fieldName);
+    if (resultFieldValue && resultFieldValue !== '') {
+      console.log(`   ✅ Found dynamic field "${fieldName}" in result description (fallback)`);
+      return resultFieldValue;
+    }
+    
+    return '';
   }
 
   /**

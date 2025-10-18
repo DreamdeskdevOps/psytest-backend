@@ -30,8 +30,34 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3000', // Frontend URL
-  credentials: true // Allow cookies to be sent
+    //   origin: 'http://localhost:3000', // Frontend URL
+    origin: function (origin, callback) {
+        // Allow requests from localhost and any IP on the local network
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            /^http:\/\/192\.168\.\d+\.\d+:3000$/  // Allow any 192.168.x.x:3000
+        ];
+
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        // Check if origin matches any allowed pattern
+        const isAllowed = allowedOrigins.some(allowedOrigin => {
+            if (typeof allowedOrigin === 'string') {
+                return origin === allowedOrigin;
+            }
+            // For regex patterns
+            return allowedOrigin.test(origin);
+        });
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true // Allow cookies to be sent
 }));
 app.use(cookieParser());
 app.use(bodyParser.json());
