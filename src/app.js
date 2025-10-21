@@ -23,6 +23,9 @@ const pdfTemplateRoutes = require('./routes/pdfTemplates');
 const fileServingRoutes = require('./routes/fileServing');
 const testAttemptRoutes = require('./routes/testAttempts');
 const userTestRoutes = require('./routes/userTests');
+const studentsRoutes = require('./routes/students');
+const reportsRoutes = require('./routes/reports');
+const pdfGenerationRoutes = require('./routes/pdfGeneration');
 // const testRoutes = require('./routes/tests');
 // const userRoutes = require('./routes/users');
 
@@ -35,8 +38,10 @@ app.use(cors({
         // Allow requests from localhost and any IP on the local network
         const allowedOrigins = [
             'http://localhost:3000',
-            'http://127.0.0.1:3000',
-            /^http:\/\/192\.168\.\d+\.\d+:3000$/  // Allow any 192.168.x.x:3000
+            // 'http://127.0.0.1:3000',
+            // 'http://172.20.10.6:3000/', // Example local network IP
+            
+            // /^http:\/\/192\.168\.\d+\.\d+:3000$/  // Allow any 192.168.x.x:3000
         ];
 
         // Allow requests with no origin (like mobile apps or curl requests)
@@ -85,6 +90,9 @@ app.use('/api/' + process.env.API_VERSION + '/admin/pdf-templates', pdfTemplateR
 app.use('/api/' + process.env.API_VERSION + '/files', fileServingRoutes);
 app.use('/api/' + process.env.API_VERSION + '/test-attempts', testAttemptRoutes);
 app.use('/api/' + process.env.API_VERSION + '/user-tests', userTestRoutes);
+app.use('/api/' + process.env.API_VERSION + '/students', studentsRoutes);
+app.use('/api/' + process.env.API_VERSION + '/reports', reportsRoutes);
+app.use('/api/' + process.env.API_VERSION + '/pdf', pdfGenerationRoutes);
 
 // app.use('/api/' + process.env.API_VERSION + '/tests', testRoutes);
 // app.use('/api/' + process.env.API_VERSION + '/users', userRoutes);
